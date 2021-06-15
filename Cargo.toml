@@ -9,10 +9,10 @@ description = "this is something wrote just for learning and probably useless"
 name = "kvs"
 path = "src/bin/kvs.rs"
 
-[dependencies]
-clap = "2.33.3"
-
 
 [dev-dependencies]
 assert_cmd = "1.0.5"
 predicates = "1.0.8"
+
+[dependencies]
+structopt = "0.3.21"

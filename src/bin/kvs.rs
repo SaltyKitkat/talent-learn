@@ -1,33 +1,33 @@
 use std::process::exit;
+use structopt::StructOpt;
 
-use clap::{App, Arg, SubCommand};
+#[derive(StructOpt)]
+struct Config {
+    #[structopt(subcommand)]
+    cmd: Option<Cmd>,
+}
+
+#[derive(StructOpt)]
+enum Cmd {
+    Set { key: String, value: String },
+    Get { key: String },
+    #[structopt(alias = "rm")]
+    Remove { key: String },
+}
 
 fn main() {
-    let matches = App::new(env!("CARGO_PKG_NAME"))
-        .version(env!("CARGO_PKG_VERSION"))
-        .author(env!("CARGO_PKG_AUTHORS"))
-        .before_help(env!("CARGO_PKG_DESCRIPTION"))
-        .subcommands(vec![
-            SubCommand::with_name("set")
-                .arg(Arg::with_name("key").takes_value(true).required(true))
-                .arg(Arg::with_name("value").takes_value(true).required(true)),
-            SubCommand::with_name("get")
-                .arg(Arg::with_name("key").takes_value(true).required(true)),
-            SubCommand::with_name("remove")
-                .alias("rm")
-                .arg(Arg::with_name("key").takes_value(true).required(true)),
-        ])
-        .get_matches();
-    match matches.subcommand() {
-        ("set", Some(subm)) => {
+    let cfg = Config::from_args();
+    use Cmd::*;
+    match cfg.cmd {
+        Some(Set { key, value }) => {
             eprintln!("unimplemented");
             exit(255)
         }
-        ("get", Some(subm)) => {
+        Some(Get { key }) => {
             eprintln!("unimplemented");
             exit(255)
         }
-        ("remove", Some(subm)) => {
+        Some(Remove { key }) => {
             eprintln!("unimplemented");
             exit(255)
         }
