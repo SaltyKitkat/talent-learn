@@ -4,10 +4,14 @@ version = "0.1.0"
 authors = ["SaltyKitkat <954537646@qq.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "kvs"
+path = "src/bin/kvs.rs"
 
 [dependencies]
 clap = "2.33.3"
+
+
 [dev-dependencies]
 assert_cmd = "1.0.5"
 predicates = "1.0.8"
