@@ -3,6 +3,7 @@ name = "kvs"
 version = "0.1.0"
 authors = ["SaltyKitkat <954537646@qq.com>"]
 edition = "2018"
+description = "this is something wrote just for learning and probably useless"
 
 [[bin]]
 name = "kvs"
