@@ -12,15 +12,15 @@ impl KvStore {
         KvStore(HashMap::new())
     }
     /// add a (key, value) pair into the KvStore
-    pub fn set(&mut self, key: String, value: String) -> Option<String> {
-        self.0.insert(key, value)
+    pub fn set(&mut self, key: String, value: String) {
+        self.0.insert(key, value);
     }
     /// get the value due to the key
     pub fn get(&mut self, key: String) -> Option<String> {
         self.0.get(&key).and_then(|s| Some(s.to_owned()))
     }
     /// remove one entry due to the key
-    pub fn remove(&mut self, key: String) -> Option<String> {
-        self.0.remove(&key)
+    pub fn remove(&mut self, key: String) {
+        self.0.remove(&key);
     }
 }
