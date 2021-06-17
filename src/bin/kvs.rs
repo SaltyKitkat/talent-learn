@@ -11,7 +11,7 @@ struct Config {
 enum Cmd {
     Set { key: String, value: String },
     Get { key: String },
-    #[structopt(alias = "rm")]
+    #[structopt(alias = "rm")] // rm is the subcmd used by test
     Remove { key: String },
 }
 
@@ -20,6 +20,7 @@ fn main() {
     use Cmd::*;
     match cfg.cmd {
         Some(Set { key, value }) => {
+            // we use 255 as the return code meaning that the function is unimplemented here.
             eprintln!("unimplemented");
             exit(255)
         }
