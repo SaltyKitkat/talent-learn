@@ -1,7 +1,7 @@
 [package]
 name = "kvs"
 version = "0.1.0"
-authors = ["SaltyKitkat <954537646@qq.com>"]
+authors = ["SaltyKitkat <sun-yk19@mails.tsinghua.edu.cn>"]
 edition = "2018"
 description = "this is something wrote just for learning and probably useless"
 
