@@ -13,4 +13,3 @@ impl Display for KvsError {
         write!(f, "some error occurred.")
     }
 }
-
