@@ -31,7 +31,7 @@ fn main() {
     let r = run_app();
     if let Err(e) = r {
         match e.as_fail().downcast_ref() {
-            Some(kvs::error::KvsError::KeyNotFound(k)) => {
+            Some(kvs::error::KvsError::KeyNotFound(_k)) => {
                 println!("Key not found");
                 exit(1)
             }
