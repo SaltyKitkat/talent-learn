@@ -30,10 +30,17 @@ enum Cmd {
 fn main() {
     let r = run_app();
     if let Err(e) = r {
-        match e.name() {
-            Some("kvs::error::KeyNotFoundError") => println!("Key not found"),
-            _ => {}
-        }
+        match e.as_fail().downcast_ref() {
+            Some(kvs::error::KvsError::KeyNotFound(k)) => {
+                println!("Key not found");
+                exit(1)
+            }
+            _ => (),
+        };
+        // match dbg!(e.as_fail()) {
+        //     Some("kvs::error::KvsError") => println!("Key not found"),
+        //     _ => {}
+        // }
         exit(1)
     }
 }

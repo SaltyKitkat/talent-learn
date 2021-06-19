@@ -1,7 +1,6 @@
 #![deny(missing_docs)]
-
 //! this is a crate doc
-use crate::error::{KeyNotFoundError, KvsInnerError, Result};
+use crate::error::{KvsError::*, Result};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -47,7 +46,6 @@ impl KvStore {
                 break;
             }
         }
-        dbg!(&index);
         Ok(Self {
             index,
             disk_db: reader.into_inner(),
@@ -75,12 +73,12 @@ impl KvStore {
             let mut buf = String::new();
             reader.read_line(&mut buf)?;
             match ron::from_str(&buf)? {
-                Log::Rm(_) => Err(KvsInnerError.into()),
+                Log::Rm(_) => Err(Inner.into()),
                 Log::Set(k, v) => {
                     if k.eq(&key) {
                         Ok(Some(v))
                     } else {
-                        Err(KvsInnerError.into())
+                        Err(Inner.into())
                     }
                 }
             }
@@ -99,7 +97,7 @@ impl KvStore {
             self.index.remove(&key);
             Ok(())
         } else {
-            Err(KeyNotFoundError::new(key).into())
+            Err(KeyNotFound(key).into())
         }
     }
 }

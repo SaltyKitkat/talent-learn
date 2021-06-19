@@ -3,3 +3,4 @@ pub use kv::KvStore;
 
 pub mod error;
 mod kv;
+mod seekablefile;
