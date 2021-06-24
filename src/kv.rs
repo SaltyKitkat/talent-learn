@@ -31,7 +31,7 @@ impl KvStore {
         let mut offset = 0;
         loop {
             let mut buf = String::new();
-            let l = disk_db.read_line_from(SeekFrom::Start(offset), &mut buf)?;
+            let l = disk_db.read_line_at(SeekFrom::Start(offset), &mut buf)?;
             if l == 0 {
                 break;
             }
@@ -141,6 +141,6 @@ impl KvStore {
 
 fn inner_get(disk_db: &mut SeekableLSFile, pos: u64) -> Result<Log> {
     let mut buf = String::new();
-    disk_db.read_line_from(SeekFrom::Start(pos), &mut buf)?;
+    disk_db.read_line_at(SeekFrom::Start(pos), &mut buf)?;
     Ok(ron::from_str(&buf)?)
 }

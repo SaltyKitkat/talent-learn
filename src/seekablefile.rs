@@ -20,7 +20,7 @@ impl SeekableLSFile {
         Ok(Self { inner })
     }
     /// read a line from offset, store them into buf and return the lenth
-    pub(crate) fn read_line_from(&mut self, offset: SeekFrom, buf: &mut String) -> Result<usize> {
+    pub(crate) fn read_line_at(&mut self, offset: SeekFrom, buf: &mut String) -> Result<usize> {
         self.inner.seek(offset)?;
         let len = BufReader::new(&mut self.inner).read_line(buf)?;
         Ok(len)
