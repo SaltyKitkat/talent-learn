@@ -50,15 +50,15 @@ impl KvStore {
         }
         Ok(Self {
             index,
-            disk_db,
             path,
+            disk_db,
             invalid_count,
         })
     }
     /// Set the value of a string key to a string.
     /// Return an error if the value is not written successfully.
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
-        let set_log = Log::Set(key.to_owned(), value.to_owned());
+        let set_log = Log::Set(key.to_owned(), value);
         let mut buf = ron::ser::to_string(&set_log)?;
         buf.push('\n');
         let (offset, _) = self.disk_db.append(buf.as_bytes())?;
@@ -124,7 +124,7 @@ impl KvStore {
 
         let mut new_db = SeekableLSFile::new(&new_path)?;
         let Self { index, disk_db, .. } = self;
-        for (_, pos) in index {
+        for pos in index.values_mut() {
             let log = inner_get(disk_db, *pos)?;
             let mut buf = ron::ser::to_string(&log)?;
             buf.push('\n');

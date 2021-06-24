@@ -30,13 +30,10 @@ enum Cmd {
 fn main() {
     let r = run_app();
     if let Err(e) = r {
-        match e.as_fail().downcast_ref() {
-            Some(kvs::error::KvsError::KeyNotFound(_k)) => {
-                println!("Key not found");
-                exit(1)
-            }
-            _ => (),
-        };
+        if let Some(kvs::error::KvsError::KeyNotFound(_k)) = e.as_fail().downcast_ref() {
+            println!("Key not found");
+            exit(1)
+        }
         // match dbg!(e.as_fail()) {
         //     Some("kvs::error::KvsError") => println!("Key not found"),
         //     _ => {}
@@ -52,14 +49,14 @@ fn run_app() -> Result<()> {
     match cfg.cmd {
         Some(Set { key, value }) => kvstore.set(key, value),
         Some(Get { key }) => {
-            let value = kvstore.get(key.clone())?;
+            let value = kvstore.get(key)?;
             match value {
                 Some(s) => println!("{}", s),
                 None => println!("Key not found"),
             }
             Ok(())
         }
-        Some(Remove { key }) => return kvstore.remove(key),
+        Some(Remove { key }) => kvstore.remove(key),
         None => unreachable!(),
     }
 }
