@@ -1,17 +1,79 @@
 #![deny(missing_docs)]
 //! this is a crate doc
-use crate::error::{Result, *};
-use crate::seekablefile::SeekableLSFile;
+use crate::error::{KvsError, Result};
+use crate::seekablefile::{PosBufReader, PosBufWriter};
+use failure::ResultExt;
 use serde::{Deserialize, Serialize};
-use std::fs::rename;
-use std::io::SeekFrom;
+use std::collections::BTreeMap;
+use std::env::current_dir;
+use std::ffi::OsStr;
+use std::fs::{File, OpenOptions};
+use std::io::{BufWriter, Seek, SeekFrom, Write};
+use std::ops::{Deref, DerefMut};
+
+use std::path::Path;
 use std::{collections::HashMap, path::PathBuf};
-/// there is just a warpper for a HashMap.
+use std::{u64, usize};
+
+const COMPACTION_THRESHOLD: usize = 4 * 1024 * 1024;
+
+struct DbCmdHandle {
+    file_id: u64,
+    offset: u64,
+    len: usize,
+}
+struct KvsIndex(HashMap<String, DbCmdHandle>);
+impl KvsIndex {
+    fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    fn insert(&mut self, key: String, index: DbCmdHandle) -> usize {
+        match self.0.insert(key, index) {
+            Some(DbCmdHandle { len, .. }) => len,
+            None => 0,
+        }
+    }
+
+    fn remove(&mut self, key: &str) -> Result<usize> {
+        match self.0.remove(key) {
+            Some(DbCmdHandle { len, .. }) => Ok(len),
+            None => Err(KvsError::Inner(String::from("Failed to find the key to remove")).into()),
+        }
+    }
+    // fn get(&self, key: &str) -> Option<&DbCmdHandle> {
+    //     self.0.get(key)
+    // }
+}
+impl Deref for KvsIndex {
+    type Target = HashMap<String, DbCmdHandle>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+/// KvStore
+/// the main struct of KVS
 pub struct KvStore {
-    index: HashMap<String, u64>,
+    index: KvsIndex,
     path: PathBuf,
-    disk_db: SeekableLSFile,
-    invalid_count: u64,
+    readers: BTreeMap<u64, PosBufReader<File>>,
+    writer: PosBufWriter<File>,
+    new_file_id: u64,
+    invalid_size: usize,
+}
+
+impl Drop for KvStore {
+    fn drop(&mut self) {
+        if let Ok(f) = current_dir() {
+            if let Ok(f) = OpenOptions::new().create(true).write(true).open(f) {
+                let mut f = BufWriter::new(f);
+                for &i in self.readers.keys() {
+                    writeln!(f, "{}", i); // todo: handle the failed situation
+                }
+            }
+        }
+    }
 }
 #[derive(Serialize, Deserialize, Debug)]
 enum Log {
@@ -23,49 +85,68 @@ impl KvStore {
     /// open a KvStore instance from the given path.
     /// return the KvStore
     pub fn open(path: impl Into<PathBuf>) -> Result<Self> {
-        let mut path = path.into();
-        path.push("mydb");
-        let mut disk_db = SeekableLSFile::new(&path)?;
-        let mut index = HashMap::new();
-        let mut invalid_count = 0;
-        let mut offset = 0;
-        loop {
-            let mut buf = String::new();
-            let l = disk_db.read_line_at(SeekFrom::Start(offset), &mut buf)?;
-            if l == 0 {
-                break;
-            }
-            match ron::de::from_str(&buf)? {
-                Log::Set(k, _) => {
-                    if index.insert(k, offset).is_some() {
-                        invalid_count += 1;
-                    }
-                }
-                Log::Rm(k) => {
-                    index.remove(&k);
-                    invalid_count += 1;
-                }
-            };
-            offset += l as u64;
+        let path: PathBuf = path.into();
+        if !(path.is_dir()) {
+            return Err(KvsError::IO).context("Working dir not found")?; // todo: create dir?
         }
+        let mut log_list = path
+            .read_dir()?
+            .flat_map(|f| -> Result<_> { Ok(f?.path()) })
+            .filter(|p| p.extension() == Some("kvs".as_ref()))
+            .flat_map(|p| p.file_stem().and_then(OsStr::to_str).map(str::parse))
+            .flatten()
+            .collect::<Vec<u64>>();
+        log_list.sort_unstable();
+        let mut readers = BTreeMap::new();
+        let mut invalid_size = 0;
+        let mut index = KvsIndex::new();
+        for &i in log_list.iter() {
+            let mut reader = db_open(&path, i)?;
+            invalid_size += load(&mut index, i, &mut reader)?;
+            readers.insert(i, reader);
+        }
+        let new_file_id = log_list.last().unwrap_or(&0) + 1;
+        let mut new_file_path = path.to_owned();
+        new_file_path.push(new_file_id.to_string() + ".kvs");
+        let new_file = OpenOptions::new()
+            .create_new(true)
+            .append(true)
+            .read(true)
+            .open(new_file_path)?;
+        let writer = PosBufWriter::new(new_file.try_clone()?)?;
+        readers.insert(new_file_id, PosBufReader::new(new_file));
         Ok(Self {
             index,
             path,
-            disk_db,
-            invalid_count,
+            readers,
+            writer,
+            new_file_id,
+            invalid_size,
         })
     }
     /// Set the value of a string key to a string.
     /// Return an error if the value is not written successfully.
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
+        let KvStore {
+            index,
+            writer,
+            new_file_id,
+            invalid_size,
+            ..
+        } = self;
         let set_log = Log::Set(key.to_owned(), value);
-        let mut buf = ron::ser::to_string(&set_log)?;
-        buf.push('\n');
-        let (offset, _) = self.disk_db.append(buf.as_bytes())?;
-        if self.index.insert(key, offset).is_some() {
-            self.invalid_count += 1;
-            self.compaction_trigger()?;
-        };
+        let buf = serde_json::ser::to_vec(&set_log)?;
+        let offset = writer.append(&buf)?;
+        self.writer.flush()?;
+        *invalid_size += index.insert(
+            key,
+            DbCmdHandle {
+                file_id: *new_file_id,
+                offset,
+                len: buf.len(),
+            },
+        );
+        self.compaction_trigger()?;
         Ok(())
     }
 
@@ -73,30 +154,46 @@ impl KvStore {
     /// If the key does not exist, return `None`.
     /// Return an error if the value is not read successfully.
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
-        if let Some(&pos) = self.index.get(&key) {
-            match inner_get(&mut self.disk_db, pos)? {
-                Log::Rm(_) => Err(KvsError::Inner.into()),
-                Log::Set(k, v) => {
-                    if k.eq(&key) {
-                        Ok(Some(v))
-                    } else {
-                        Err(KvsError::Inner.into())
+        match self.index.get(&key) {
+            Some(DbCmdHandle {
+                file_id,
+                offset: pos,
+                len,
+            }) => {
+                if let Some(reader) = self.readers.get_mut(file_id) {
+                    let mut buf = vec![0; *len];
+                    reader.read_at(*pos, &mut buf)?;
+                    if let Log::Set(k, v) = serde_json::de::from_slice(&buf)? {
+                        if k.eq(&key) {
+                            return Ok(Some(v));
+                        } else {
+                            return Err(KvsError::Inner(String::from(
+                                "the key read from disk is different from the key in index",
+                            ))
+                            .into());
+                        }
                     }
                 }
+                Err(KvsError::Inner(String::from("failed to get file_id in index")).into())
             }
-        } else {
-            Ok(None)
+            None => Ok(None),
         }
     }
+
     /// Remove a given key.
     /// Return an error if the key does not exist or is not removed successfully.
     pub fn remove(&mut self, key: String) -> Result<()> {
-        if self.index.contains_key(&key) {
-            let mut rm_log = ron::ser::to_string(&Log::Rm(key.to_owned()))?;
-            rm_log.push('\n');
-            self.disk_db.append(rm_log.as_bytes())?;
-            self.index.remove(&key);
-            self.invalid_count += 1;
+        let Self {
+            index,
+            writer,
+            invalid_size,
+            ..
+        } = self;
+        if index.contains_key(&key) {
+            let log = serde_json::ser::to_vec(&Log::Rm(key.to_owned()))?;
+            writer.append(&log)?;
+            writer.flush()?;
+            *invalid_size += index.remove(&key)? + log.len();
             self.compaction_trigger()?;
             Ok(())
         } else {
@@ -105,42 +202,75 @@ impl KvStore {
     }
 
     fn compaction_trigger(&mut self) -> Result<()> {
-        if self.invalid_count >= self.index.len() as u64 {
-            self.compaction()
+        if self.invalid_size >= COMPACTION_THRESHOLD {
+            self.compaction_inner()
         } else {
             Ok(())
         }
     }
 
-    fn compaction(&mut self) -> Result<()> {
-        let mut file_name = self
-            .path
-            .file_name()
-            .map_or("mydb".into(), |s| s.to_string_lossy())
-            .to_string();
-        file_name.push_str(".new");
-        let mut new_path = self.path.clone();
-        new_path.set_file_name(file_name);
+    fn compaction_inner(&mut self) -> Result<()> {
+        let Self {
+            index,
+            path,
+            readers,
+            writer,
+            new_file_id,
+            invalid_size,
+        } = self;
+        todo!()
+        //         let mut file_name = self
+        //             .path
+        //             .file_name()
+        //             .map_or("mydb".into(), |s| s.to_string_lossy())
+        //             .to_string();
+        //         file_name.push_str(".new");
+        //         let mut new_path = self.path.clone();
+        //         new_path.set_file_name(file_name);
 
-        let mut new_db = SeekableLSFile::new(&new_path)?;
-        let Self { index, disk_db, .. } = self;
-        for pos in index.values_mut() {
-            let log = inner_get(disk_db, *pos)?;
-            let mut buf = ron::ser::to_string(&log)?;
-            buf.push('\n');
-            let (tmp, _) = new_db.append(buf.as_bytes())?;
-            *pos = tmp;
-        }
-        rename(&new_path, &self.path)?;
-        self.path = new_path;
-        self.disk_db = new_db;
-        self.invalid_count = 0;
-        Ok(())
+        //         let mut new_db = SeekableLSFile::new(&new_path)?;
+        //         let Self { index, disk_db, .. } = self;
+        //         for pos in index.values_mut() {
+        //             let log = inner_get(disk_db, *pos)?;
+        //             let mut buf = ron::ser::to_string(&log)?;
+        //             buf.push('\n');
+        //             let (tmp, _) = new_db.append(buf.as_bytes())?;
+        //             *pos = tmp;
+        //         }
+        //         rename(&new_path, &self.path)?;
+        //         self.path = new_path;
+        //         self.disk_db = new_db;
+        //         self.invalid_count = 0;
+        //         Ok(())
     }
 }
 
-fn inner_get(disk_db: &mut SeekableLSFile, pos: u64) -> Result<Log> {
-    let mut buf = String::new();
-    disk_db.read_line_at(SeekFrom::Start(pos), &mut buf)?;
-    Ok(ron::from_str(&buf)?)
+fn load(index: &mut KvsIndex, file_id: u64, db_file: &mut PosBufReader<File>) -> Result<usize> {
+    let mut invalid_size = 0;
+    let mut pos = db_file.seek(SeekFrom::Start(0))?;
+    let mut t = serde_json::Deserializer::from_reader(db_file.deref_mut()).into_iter::<Log>();
+    while let Some(cmd) = t.next() {
+        let new_pos = t.byte_offset() as u64;
+        match cmd? {
+            Log::Rm(k) => invalid_size += index.remove(&k)?,
+            Log::Set(k, _) => {
+                invalid_size += index.insert(
+                    k,
+                    DbCmdHandle {
+                        file_id,
+                        offset: pos,
+                        len: (new_pos - pos) as usize,
+                    },
+                )
+            }
+        }
+        pos = new_pos;
+    }
+    Ok(invalid_size)
+}
+fn db_open(path: &Path, i: u64) -> Result<PosBufReader<File>> {
+    let mut db_path = path.to_owned();
+    db_path.push(i.to_string() + ".kvs");
+    let db_file = OpenOptions::new().read(true).open(db_path)?;
+    Ok(PosBufReader::new(db_file))
 }

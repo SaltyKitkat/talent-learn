@@ -32,12 +32,7 @@ fn main() {
     if let Err(e) = r {
         if let Some(kvs::error::KvsError::KeyNotFound(_k)) = e.as_fail().downcast_ref() {
             println!("Key not found");
-            exit(1)
         }
-        // match dbg!(e.as_fail()) {
-        //     Some("kvs::error::KvsError") => println!("Key not found"),
-        //     _ => {}
-        // }
         exit(1)
     }
 }

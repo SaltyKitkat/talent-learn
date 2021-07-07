@@ -5,7 +5,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, Fail)]
 pub enum KvsError {
     KeyNotFound(String),
-    Inner,
+    Inner(String),
     IO,
 }
 impl Display for KvsError {
