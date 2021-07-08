@@ -1,6 +1,5 @@
 pub use error::Result;
-pub use kv::KvStore;
+pub use kvstore::KvStore;
 
 pub mod error;
-mod kv;
-mod seekablefile;
+mod kvstore;

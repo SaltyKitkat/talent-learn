@@ -8,8 +8,8 @@ use structopt::StructOpt;
 struct Config {
     #[structopt(subcommand)]
     cmd: Option<Cmd>,
-    #[structopt(default_value = "mydb")]
-    db_path: PathBuf,
+    #[structopt(parse(from_os_str))]
+    db_path: Option<PathBuf>,
 }
 
 #[derive(StructOpt)]
@@ -40,7 +40,10 @@ fn main() {
 fn run_app() -> Result<()> {
     let cfg = Config::from_args();
     use Cmd::*;
-    let mut kvstore = KvStore::open(current_dir()?).expect("open db file failed");
+    let mut kvstore = KvStore::open(
+        cfg.db_path.unwrap_or_else(|| current_dir().expect("failed to open current dir as working dir"))
+    )
+    .expect("open db file failed");
     match cfg.cmd {
         Some(Set { key, value }) => kvstore.set(key, value),
         Some(Get { key }) => {
