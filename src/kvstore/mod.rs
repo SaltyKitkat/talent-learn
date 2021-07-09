@@ -4,12 +4,15 @@ use crate::error::{KvsError, Result};
 // use logmeta::LogMeta;
 use failure::ResultExt;
 use logmisc::{LogMeta, LogReader, LogReaders, LogWriter};
-use std::ffi::OsStr;
-use std::fs::{remove_file, File, OpenOptions};
-use std::io::{Seek, SeekFrom};
-use std::ops::DerefMut;
-use std::path::{Path, PathBuf};
+use std::{
+    ffi::OsStr,
+    fs::{remove_file, File, OpenOptions},
+    io::{Seek, SeekFrom},
+    ops::DerefMut,
+    path::{Path, PathBuf},
+};
 
+/// when the invalid size is larger than `COMPACTION_THRESHOLD`(in bytes), a compaction process will be triggered.
 const COMPACTION_THRESHOLD: usize = 4 * 1024 * 1024;
 
 mod kvsindex;
@@ -29,7 +32,9 @@ pub struct KvStore {
 
 impl KvStore {
     /// open a KvStore instance from the given path.
-    /// return the KvStore
+    /// the path should be a dir with some .kvs file in it.
+    /// this function will use the kvs files to build a KvStore db and return it if succeed.
+    /// If any error met, this function will return it.
     pub fn open(path: impl Into<PathBuf>) -> Result<Self> {
         let path: PathBuf = path.into();
         if !(path.is_dir()) {
@@ -70,8 +75,8 @@ impl KvStore {
         })
     }
     /// Set the value of a key.
-    /// Return Ok(()) if succeed.
-    /// Return an error if the value is not written successfully.
+    /// Return `Ok(())` if succeed.
+    /// Return an error if the value is not set successfully.
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
         let (k, m) = self.writer.append_log(Log::Set(key, value))?;
         self.invalid_size += self.index.insert(k, m);
@@ -79,8 +84,9 @@ impl KvStore {
         Ok(())
     }
 
-    /// Get the string value of a string key.
-    /// If the key does not exist, return `None`.
+    /// Get the value of a key.
+    /// Return `Ok(Some(value))` if something is found.
+    /// If the key does not exist, return `Ok(None)`.
     /// Return an error if the value is not read successfully.
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
         match self.index.get(&key) {
@@ -117,6 +123,7 @@ impl KvStore {
         }
     }
 
+    // note: index and writer are replaced by the new ones while readers is just cleared.
     fn compaction_inner(&mut self) -> Result<()> {
         let mut new_path = self.path.to_owned();
         let new_file_id = self.writer.id() + 1;
