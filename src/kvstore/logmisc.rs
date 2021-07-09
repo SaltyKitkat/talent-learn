@@ -1,6 +1,7 @@
 #![deny(missing_docs)]
 use crate::error::{KvsError, Result};
 use serde::{Deserialize, Serialize};
+use serde_json::{de::IoRead, StreamDeserializer};
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -49,6 +50,13 @@ impl<T: Read + Seek> LogReader<T> {
         self.inner.read_exact(&mut buf)?;
         Ok(serde_json::de::from_slice(&buf)?)
     }
+
+    pub(crate) fn logs(
+        &mut self,
+    ) -> Result<StreamDeserializer<'_, IoRead<&mut BufReader<T>>, Log>> {
+        self.inner.seek(SeekFrom::Start(0))?;
+        Ok(serde_json::Deserializer::from_reader(&mut self.inner).into_iter())
+    }
 }
 
 impl<T: Read> Deref for LogReader<T> {
@@ -80,7 +88,8 @@ impl LogReaders {
             Err(KvsError::Inner(format!(
                 "failed to find file id {} in readers index.",
                 meta.file_id
-            )).into())
+            ))
+            .into())
         }
     }
 }

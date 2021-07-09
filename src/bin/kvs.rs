@@ -41,7 +41,8 @@ fn run_app() -> Result<()> {
     let cfg = Config::from_args();
     use Cmd::*;
     let mut kvstore = KvStore::open(
-        cfg.db_path.unwrap_or_else(|| current_dir().expect("failed to open current dir as working dir"))
+        cfg.db_path
+            .unwrap_or_else(|| current_dir().expect("failed to open current dir as working dir")),
     )
     .expect("open db file failed");
     match cfg.cmd {
