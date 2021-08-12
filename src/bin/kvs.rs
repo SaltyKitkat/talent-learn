@@ -8,7 +8,6 @@ use structopt::StructOpt;
 struct Config {
     #[structopt(subcommand)]
     cmd: Option<Cmd>,
-    #[structopt(parse(from_os_str))]
     db_path: Option<PathBuf>,
 }
 

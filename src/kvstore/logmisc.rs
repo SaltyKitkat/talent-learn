@@ -51,12 +51,6 @@ impl<T: Read + Seek> LogReader<T> {
         Ok(serde_json::de::from_slice(&buf)?)
     }
 
-    pub(crate) fn logs(
-        &mut self,
-    ) -> Result<StreamDeserializer<'_, IoRead<&mut BufReader<T>>, Log>> {
-        self.inner.seek(SeekFrom::Start(0))?;
-        Ok(serde_json::Deserializer::from_reader(&mut self.inner).into_iter())
-    }
 }
 
 impl<T: Read> Deref for LogReader<T> {

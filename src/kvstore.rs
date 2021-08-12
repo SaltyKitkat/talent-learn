@@ -175,6 +175,7 @@ fn load(index: &mut KvsIndex, file_id: u64, db_file: &mut LogReader<File>) -> Re
     }
     Ok(invalid_size)
 }
+
 fn db_open(path: &Path, i: u64) -> Result<LogReader<File>> {
     let mut db_path = path.to_owned();
     db_path.push(i.to_string() + ".kvs");

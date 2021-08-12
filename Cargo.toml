@@ -6,8 +6,11 @@ edition = "2018"
 description = "this is something wrote just for learning and probably useless"
 
 [[bin]]
-name = "kvs"
-path = "src/bin/kvs.rs"
+name = "kvs-client"
+path = "src/bin/kvs-client.rs"
+[[bin]]
+name = "kvs-server"
+path = "src/bin/kvs-server.rs"
 
 
 [dev-dependencies]
@@ -20,5 +23,8 @@ walkdir = "2.3.2"
 failure = "0.1.8"
 ron = "0.6.4"
 serde = { version = "1.0.126", features = ["derive"] }
+serde-resp = "0.3.1"
 serde_json = "1.0.64"
+slog = "2.7.0"
+sloggers = "2.0.0"
 structopt = "0.3.21"
