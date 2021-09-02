@@ -1,9 +1,6 @@
-use std::{
-    io::{BufRead, BufReader, BufWriter},
-    net::{SocketAddr, TcpListener},
-};
-use structopt::StructOpt;
-
+use slog::{info, o, Drain};
+use std::{env::current_dir, io::{BufRead, BufReader, BufWriter}, net::{SocketAddr, TcpListener}};
+use structopt::{clap::crate_version, StructOpt};
 #[derive(StructOpt)]
 struct Config {
     #[structopt(long, global = true, default_value = "127.0.0.1:4000")]
@@ -15,6 +12,14 @@ struct Config {
 use kvs::Result;
 fn run_app() -> Result<()> {
     let cfg = Config::from_args();
+    let decorator = slog_term::TermDecorator::new().build();
+    let drain = slog_term::FullFormat::new(decorator).build().fuse();
+    let drain = slog_async::Async::new(drain).build().fuse();
+    let log = slog::Logger::root(drain, o!());
+    info!(log, "kvs-server started!");
+    info!(log, "version: {}", crate_version!());
+    let path = current_dir()?;
+    info!(log, "Opening db in path: {}", path.to_string_lossy());
     // read engine from path
     // if new: read engine from cli, create new db
     // else: log: warning: musing engine .., .. from cli is ignored
@@ -33,6 +38,8 @@ fn run_app() -> Result<()> {
                 break;
             }
             // parse and execute
+            let cmd = todo!("parse the cmd");
+            todo!("exec the cmd");
             // return result
         }
     }

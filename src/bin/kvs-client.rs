@@ -1,13 +1,12 @@
+use kvs::Cmd;
 use kvs::KvStore;
 use kvs::Result;
 use slog::info;
-use sloggers::Build;
 use std::env::current_dir;
 use std::net::SocketAddr;
 use std::net::TcpStream;
 use std::{path::PathBuf, process::exit};
 use structopt::StructOpt;
-use kvs::Cmd;
 #[derive(StructOpt)]
 struct Config {
     #[structopt(subcommand)]
@@ -30,10 +29,7 @@ fn main() {
 
 fn run_app() -> Result<()> {
     let cfg = Config::from_args();
-    let logger = sloggers::syslog::SyslogBuilder::new().build()?;
     let socket = cfg.addr;
-    info!(logger, "connecting to address: {}", socket);
     let stream = TcpStream::connect(socket)?;
-    info!(logger, "connection succeed!");
     Ok(())
 }
