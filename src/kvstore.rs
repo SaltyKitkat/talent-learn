@@ -1,7 +1,6 @@
 #![deny(missing_docs)]
 //! this is a crate doc
 use crate::error::{KvsError, Result};
-// use logmeta::LogMeta;
 use failure::ResultExt;
 use logmisc::{LogMeta, LogReader, LogReaders, LogWriter};
 use std::{
@@ -126,7 +125,7 @@ impl KvStore {
     // note: index and writer are replaced by the new ones while readers is just cleared.
     fn compaction_inner(&mut self) -> Result<()> {
         let mut new_path = self.path.to_owned();
-        let new_file_id = self.writer.id() + 1;
+        let new_file_id = 0;
         new_path.push(new_file_id.to_string() + ".kvs");
         let new_file = OpenOptions::new()
             .create_new(true)
@@ -155,6 +154,12 @@ impl KvStore {
         self.readers.insert(new_file_id, new_reader);
         self.invalid_size = 0;
         Ok(())
+    }
+}
+
+impl Drop for KvStore {
+    fn drop(&mut self) {
+        self.compaction_inner();
     }
 }
 
