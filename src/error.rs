@@ -4,6 +4,7 @@ use failure::{Error, Fail};
 pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, Fail)]
 pub enum KvsError {
+    CommandError(String),
     KeyNotFound(String),
     Inner(String),
     IO,

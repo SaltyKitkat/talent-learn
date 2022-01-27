@@ -1,3 +1,4 @@
+use kvs::error::KvsError;
 use kvs::KvStore;
 use kvs::Result;
 use std::env::current_dir;
@@ -8,7 +9,8 @@ use structopt::StructOpt;
 struct Config {
     #[structopt(subcommand)]
     cmd: Option<Cmd>,
-    db_path: Option<PathBuf>,
+    #[structopt(default_value = ".")]
+    db_path: PathBuf,
 }
 
 #[derive(StructOpt)]
@@ -38,23 +40,23 @@ fn main() {
 
 fn run_app() -> Result<()> {
     let cfg = Config::from_args();
-    use Cmd::*;
-    let mut kvstore = KvStore::open(
-        cfg.db_path
-            .unwrap_or_else(|| current_dir().expect("failed to open current dir as working dir")),
-    )
-    .expect("open db file failed");
-    match cfg.cmd {
-        Some(Set { key, value }) => kvstore.set(key, value),
-        Some(Get { key }) => {
-            let value = kvstore.get(key)?;
-            match value {
-                Some(s) => println!("{}", s),
-                None => println!("Key not found"),
+    if let Some(cmd) = cfg.cmd {
+        use Cmd::*;
+        let mut kvstore = KvStore::open(cfg.db_path).expect("open db file failed");
+        match cmd {
+            Set { key, value } => kvstore.set(key, value),
+            Get { key } => {
+                let value = kvstore.get(key)?;
+                match value {
+                    Some(s) => println!("{}", s),
+                    None => println!("Key not found"),
+                }
+                Ok(())
             }
-            Ok(())
+            Remove { key } => kvstore.remove(key),
         }
-        Some(Remove { key }) => kvstore.remove(key),
-        None => unreachable!(),
+    } else {
+        eprintln!("run `kvs --help` to get help messages");
+        Err(KvsError::CommandError(String::from("unknown command")).into())
     }
 }

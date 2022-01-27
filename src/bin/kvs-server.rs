@@ -1,15 +1,19 @@
-use slog::{info, o, Drain};
-use std::{env::current_dir, io::{BufRead, BufReader, BufWriter}, net::{SocketAddr, TcpListener}};
+use slog::{error, info, o, Drain};
+use std::{
+    env::current_dir,
+    io::{BufRead, BufReader, BufWriter},
+    net::{SocketAddr, TcpListener},
+};
 use structopt::{clap::crate_version, StructOpt};
 #[derive(StructOpt)]
 struct Config {
     #[structopt(long, global = true, default_value = "127.0.0.1:4000")]
     addr: SocketAddr,
-    #[structopt(long, global = true)]
-    engine: Option<String>,
+    #[structopt(long, global = true, default_value = "kvs")]
+    engine: String,
 }
 
-use kvs::Result;
+use kvs::{error::KvsError, KvStore, Result};
 fn run_app() -> Result<()> {
     let cfg = Config::from_args();
     let decorator = slog_term::TermDecorator::new().build();
@@ -20,6 +24,17 @@ fn run_app() -> Result<()> {
     info!(log, "version: {}", crate_version!());
     let path = current_dir()?;
     info!(log, "Opening db in path: {}", path.to_string_lossy());
+    let engine = match cfg.engine.as_str() {
+        "kvs" => KvStore::open(path)?,
+        "sled" => todo!(),
+        _ => {
+            error!(log, "unknown engine from cli: {}", cfg.engine);
+            Err(KvsError::CommandError(format!(
+                "unknown engine: {}",
+                cfg.engine
+            )))?
+        }
+    };
     // read engine from path
     // if new: read engine from cli, create new db
     // else: log: warning: musing engine .., .. from cli is ignored
