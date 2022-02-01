@@ -1,7 +1,6 @@
 #![deny(missing_docs)]
 use crate::error::{KvsError, Result};
 use serde::{Deserialize, Serialize};
-use serde_json::{de::IoRead, StreamDeserializer};
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -50,7 +49,6 @@ impl<T: Read + Seek> LogReader<T> {
         self.inner.read_exact(&mut buf)?;
         Ok(serde_json::de::from_slice(&buf)?)
     }
-
 }
 
 impl<T: Read> Deref for LogReader<T> {
