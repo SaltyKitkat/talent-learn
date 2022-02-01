@@ -1,11 +1,10 @@
 #![deny(missing_docs)]
 //! this is a crate doc
 use crate::error::{KvsError, Result};
-use failure::ResultExt;
 use logmisc::{LogMeta, LogReader, LogReaders, LogWriter};
 use std::{
     ffi::OsStr,
-    fs::{remove_file, File, OpenOptions},
+    fs::{self, remove_file, File, OpenOptions},
     io::{Seek, SeekFrom},
     ops::DerefMut,
     path::{Path, PathBuf},
@@ -26,7 +25,7 @@ pub struct KvStore {
     path: PathBuf,
     readers: LogReaders,
     writer: LogWriter<File>,
-    invalid_size: usize,
+    uncompact_size: usize,
 }
 
 impl KvStore {
@@ -35,24 +34,25 @@ impl KvStore {
     /// this function will use the kvs files to build a KvStore db and return it if succeed.
     /// If any error met, this function will return it.
     pub fn open(path: impl Into<PathBuf>) -> Result<Self> {
-        let path: PathBuf = path.into();
-        if !(path.is_dir()) {
-            return Err(KvsError::IO).context("Working dir not found")?; // todo: create dir?
-        }
-        let mut log_list = path
-            .read_dir()?
-            .flat_map(|f| -> Result<_> { Ok(f?.path()) })
-            .filter(|p| p.extension() == Some("kvs".as_ref()))
-            .flat_map(|p| p.file_stem().and_then(OsStr::to_str).map(str::parse))
-            .flatten()
-            .collect::<Vec<u64>>();
-        log_list.sort_unstable();
+        let path = path.into();
+        fs::create_dir_all(&path)?;
+        let log_list = path.read_dir()?;
+        let log_list = {
+            let mut log_list = log_list
+                .flat_map(|f| -> Result<_> { Ok(f?.path()) })
+                .filter(|p| p.extension() == Some("kvs".as_ref()))
+                .flat_map(|p| p.file_stem().and_then(OsStr::to_str).map(str::parse))
+                .flatten()
+                .collect::<Vec<u64>>();
+            log_list.sort_unstable();
+            log_list
+        };
         let mut readers = LogReaders::new();
-        let mut invalid_size = 0;
+        let mut uncompact_size = 0;
         let mut index = KvsIndex::new();
         for &i in log_list.iter() {
             let mut reader = db_open(&path, i)?;
-            invalid_size += load(&mut index, i, &mut reader)?;
+            uncompact_size += load(&mut index, i, &mut reader)?;
             readers.insert(i, reader);
         }
         let new_file_id = log_list.last().unwrap_or(&0) + 1;
@@ -70,7 +70,7 @@ impl KvStore {
             path,
             readers,
             writer,
-            invalid_size,
+            uncompact_size,
         })
     }
     /// Set the value of a key.
@@ -78,7 +78,7 @@ impl KvStore {
     /// Return an error if the value is not set successfully.
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
         let (k, m) = self.writer.append_log(Log::Set(key, value))?;
-        self.invalid_size += self.index.insert(k, m);
+        self.uncompact_size += self.index.insert(k, m);
         self.compaction_trigger()?;
         Ok(())
     }
@@ -106,7 +106,7 @@ impl KvStore {
     pub fn remove(&mut self, key: String) -> Result<()> {
         if self.index.contains_key(&key) {
             let (key, cmd) = self.writer.append_log(Log::Rm(key))?;
-            self.invalid_size += self.index.remove(&key)? + cmd.len();
+            self.uncompact_size += self.index.remove(&key)? + cmd.len();
             self.compaction_trigger()?;
             Ok(())
         } else {
@@ -115,7 +115,7 @@ impl KvStore {
     }
 
     fn compaction_trigger(&mut self) -> Result<()> {
-        if self.invalid_size >= COMPACTION_THRESHOLD {
+        if self.uncompact_size >= COMPACTION_THRESHOLD {
             self.compaction_inner()
         } else {
             Ok(())
@@ -152,7 +152,7 @@ impl KvStore {
         }
         self.readers.clear();
         self.readers.insert(new_file_id, new_reader);
-        self.invalid_size = 0;
+        self.uncompact_size = 0;
         Ok(())
     }
 }
