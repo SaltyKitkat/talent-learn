@@ -1,9 +1,8 @@
 use failure::Fail;
 use kvs::{
     cli::{Request, Response},
-    engine::KvsEngine,
     error::KvsError,
-    KvStore,
+    KvStore, KvsEngine,
 };
 use slog::{error, info, o, Drain};
 use std::{
