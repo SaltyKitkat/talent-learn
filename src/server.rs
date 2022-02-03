@@ -3,7 +3,6 @@ use crate::{
     error::{KvsError, Result},
     KvStore, KvsEngine,
 };
-use either::Either;
 use std::{
     fs,
     io::{Read, Write},
@@ -15,7 +14,7 @@ impl KvsServer {
     pub fn open(
         path: impl AsRef<Path>,
         engine: Option<KvsEngineSel>,
-    ) -> Result<Either<KvStore, SledKvsEngine>> {
+    ) -> Result<Box<dyn KvsEngine>> {
         let path = {
             let mut p = path.as_ref().to_path_buf();
             p.push("00engine");
@@ -63,7 +62,7 @@ pub enum KvsEngineSel {
     SledKvsEngine,
 }
 impl KvsEngineSel {
-    pub fn open(self, path: &Path) -> crate::error::Result<Either<KvStore, SledKvsEngine>> {
+    pub fn open(self, path: &Path) -> crate::error::Result<Box<dyn KvsEngine>> {
         let mut f = fs::OpenOptions::new()
             .create_new(true)
             .write(true)
@@ -71,8 +70,8 @@ impl KvsEngineSel {
         write!(f, "{self}")?;
         let path = path.parent().unwrap();
         Ok(match self {
-            KvsEngineSel::KvStore => Either::Left(KvStore::open(path)?),
-            KvsEngineSel::SledKvsEngine => Either::Right(SledKvsEngine::open(path)?),
+            KvsEngineSel::KvStore => Box::new(KvStore::open(path)?),
+            KvsEngineSel::SledKvsEngine => Box::new(SledKvsEngine::open(path)?),
         })
     }
 }
