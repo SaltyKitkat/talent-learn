@@ -1,5 +1,6 @@
 use kvs::error::KvsError;
 use kvs::KvStore;
+use kvs::KvsEngine;
 use kvs::Result;
 use std::{path::PathBuf, process::exit};
 use structopt::StructOpt;

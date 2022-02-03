@@ -1,6 +1,8 @@
+use either::Either;
 use failure::Fail;
 use kvs::{
     cli::{Request, Response},
+    engine::sled::SledKvsEngine,
     error::KvsError,
     KvStore, KvsEngine,
 };
@@ -113,10 +115,10 @@ fn run_app() -> kvs::error::Result<()> {
     };
 
     // open db
-    let mut db: Box<dyn KvsEngine> = Box::new(match engine {
-        KvsEngineSel::KvStore => KvStore::open(path.parent().unwrap())?,
-        KvsEngineSel::SledKvsEngine => todo!("add sled engine support"),
-    });
+    let mut db = match engine {
+        KvsEngineSel::KvStore => Either::Left(KvStore::open(path.parent().unwrap())?),
+        KvsEngineSel::SledKvsEngine => Either::Right(SledKvsEngine::open(path.parent().unwrap())?),
+    };
     // setup listener
     let listener = TcpListener::bind(cfg.addr)?;
     info!(log, "Listening on socket: {}", cfg.addr);

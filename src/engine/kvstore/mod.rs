@@ -1,6 +1,9 @@
 #![deny(missing_docs)]
 //! this is a crate doc
-use crate::error::{KvsError, Result};
+use crate::{
+    error::{KvsError, Result},
+    KvsEngine,
+};
 use logmisc::{LogMeta, LogReader, LogReaders, LogWriter};
 use std::{
     ffi::OsStr,
@@ -33,10 +36,10 @@ impl KvStore {
     /// the path should be a dir with some .kvs file in it.
     /// this function will use the kvs files to build a KvStore db and return it if succeed.
     /// If any error met, this function will return it.
-    pub fn open(path: impl Into<PathBuf>) -> Result<Self> {
-        let path = path.into();
-        fs::create_dir_all(&path)?;
-        let log_list = path.read_dir()?;
+    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+        let path = path.as_ref();
+        fs::create_dir_all(path)?;
+        let log_list = fs::read_dir(path)?;
         let log_list = {
             let mut log_list = log_list
                 .flat_map(|f| -> Result<_> { Ok(f?.path()) })
@@ -51,7 +54,7 @@ impl KvStore {
         let mut uncompact_size = 0;
         let mut index = KvsIndex::new();
         for &i in log_list.iter() {
-            let mut reader = db_open(&path, i)?;
+            let mut reader = db_open(path.as_ref(), i)?;
             uncompact_size += load(&mut index, i, &mut reader)?;
             readers.insert(i, reader);
         }
@@ -67,51 +70,11 @@ impl KvStore {
         readers.insert(new_file_id, LogReader::new(new_file));
         Ok(Self {
             index,
-            path,
+            path: path.to_path_buf(),
             readers,
             writer,
             uncompact_size,
         })
-    }
-    /// Set the value of a key.
-    /// Return `Ok(())` if succeed.
-    /// Return an error if the value is not set successfully.
-    pub fn set(&mut self, key: String, value: String) -> Result<()> {
-        let (k, m) = self.writer.append_log(Log::Set(key, value))?;
-        self.uncompact_size += self.index.insert(k, m);
-        self.compaction_trigger()?;
-        Ok(())
-    }
-
-    /// Get the value of a key.
-    /// Return `Ok(Some(value))` if something is found.
-    /// If the key does not exist, return `Ok(None)`.
-    /// Return an error if the value is not read successfully.
-    pub fn get(&mut self, key: String) -> Result<Option<String>> {
-        match self.index.get(&key) {
-            Some(meta) => {
-                let read_log = self.readers.read_log(meta)?;
-                debug_assert!(matches!(read_log, Log::Set(..)));
-                match read_log {
-                    Log::Set(_, s) => Ok(Some(s)),
-                    Log::Rm(..) => unreachable!(),
-                }
-            }
-            None => Ok(None),
-        }
-    }
-
-    /// Remove a given key.
-    /// Return an error if the key does not exist or is not removed successfully.
-    pub fn remove(&mut self, key: String) -> Result<()> {
-        if self.index.contains_key(&key) {
-            let (key, cmd) = self.writer.append_log(Log::Rm(key))?;
-            self.uncompact_size += self.index.remove(&key)? + cmd.len();
-            self.compaction_trigger()?;
-            Ok(())
-        } else {
-            Err(KvsError::KeyNotFound(key).into())
-        }
     }
 
     fn compaction_trigger(&mut self) -> Result<()> {
@@ -154,6 +117,49 @@ impl KvStore {
         self.readers.insert(new_file_id, new_reader);
         self.uncompact_size = 0;
         Ok(())
+    }
+}
+
+impl KvsEngine for KvStore {
+    /// Set the value of a key.
+    /// Return `Ok(())` if succeed.
+    /// Return an error if the value is not set successfully.
+    fn set(&mut self, key: String, value: String) -> Result<()> {
+        let (k, m) = self.writer.append_log(Log::Set(key, value))?;
+        self.uncompact_size += self.index.insert(k, m);
+        self.compaction_trigger()?;
+        Ok(())
+    }
+
+    /// Get the value of a key.
+    /// Return `Ok(Some(value))` if something is found.
+    /// If the key does not exist, return `Ok(None)`.
+    /// Return an error if the value is not read successfully.
+    fn get(&mut self, key: String) -> Result<Option<String>> {
+        match self.index.get(&key) {
+            Some(meta) => {
+                let read_log = self.readers.read_log(meta)?;
+                debug_assert!(matches!(read_log, Log::Set(..)));
+                match read_log {
+                    Log::Set(_, s) => Ok(Some(s)),
+                    Log::Rm(..) => unreachable!(),
+                }
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Remove a given key.
+    /// Return an error if the key does not exist or is not removed successfully.
+    fn remove(&mut self, key: String) -> Result<()> {
+        if self.index.contains_key(&key) {
+            let (key, cmd) = self.writer.append_log(Log::Rm(key))?;
+            self.uncompact_size += self.index.remove(&key)? + cmd.len();
+            self.compaction_trigger()?;
+            Ok(())
+        } else {
+            Err(KvsError::KeyNotFound(key).into())
+        }
     }
 }
 

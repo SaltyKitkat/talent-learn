@@ -1,4 +1,6 @@
-use crate::KvStore;
+pub mod kvstore;
+pub mod sled;
+use either::Either;
 use failure::Error;
 
 pub trait KvsEngine {
@@ -8,16 +10,29 @@ pub trait KvsEngine {
     fn remove(&mut self, key: String) -> Result<(), Error>;
 }
 
-impl KvsEngine for KvStore {
+impl<L, R> KvsEngine for Either<L, R>
+where
+    L: KvsEngine,
+    R: KvsEngine,
+{
     fn set(&mut self, key: String, value: String) -> Result<(), Error> {
-        KvStore::set(self, key, value)
+        match self {
+            Either::Left(l) => l.set(key, value),
+            Either::Right(r) => r.set(key, value),
+        }
     }
 
     fn get(&mut self, key: String) -> Result<Option<String>, Error> {
-        KvStore::get(self, key)
+        match self {
+            Either::Left(l) => l.get(key),
+            Either::Right(r) => r.get(key),
+        }
     }
 
     fn remove(&mut self, key: String) -> Result<(), Error> {
-        KvStore::remove(self, key)
+        match self {
+            Either::Left(l) => l.remove(key),
+            Either::Right(r) => r.remove(key),
+        }
     }
 }
