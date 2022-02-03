@@ -54,13 +54,13 @@ impl KvStore {
         let mut uncompact_size = 0;
         let mut index = KvsIndex::new();
         for &i in log_list.iter() {
-            let mut reader = db_open(path.as_ref(), i)?;
+            let mut reader = db_open(path, i)?;
             uncompact_size += load(&mut index, i, &mut reader)?;
             readers.insert(i, reader);
         }
         let new_file_id = log_list.last().unwrap_or(&0) + 1;
         let mut new_file_path = path.to_owned();
-        new_file_path.push(new_file_id.to_string() + ".kvs");
+        new_file_path.push(format!("{new_file_id}.kvs"));
         let new_file = OpenOptions::new()
             .create_new(true)
             .append(true)
