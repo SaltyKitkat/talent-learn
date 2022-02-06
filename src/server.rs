@@ -1,58 +1,59 @@
 use crate::{
+    cli::{Request, Response},
     engine::sled::SledKvsEngine,
     error::{KvsError, Result},
     KvStore, KvsEngine,
 };
 use std::{
+    fmt::Display,
     fs,
-    io::{Read, Write},
+    io::{self, Write},
+    net::{TcpListener, TcpStream, ToSocketAddrs},
     path::Path,
 };
 
-pub struct KvsServer;
+pub struct KvsServer(Box<dyn KvsEngine>);
 impl KvsServer {
-    pub fn open(
-        path: impl AsRef<Path>,
-        engine: Option<KvsEngineSel>,
-    ) -> Result<Box<dyn KvsEngine>> {
-        let path = {
-            let mut p = path.as_ref().to_path_buf();
-            p.push("00engine");
-            p
-        };
-        let engine_on_fs: Option<KvsEngineSel> = if path.is_file() {
-            let mut engine = fs::File::open(&path)?;
-            let mut buf = Vec::with_capacity(8);
-            engine.read_to_end(&mut buf)?;
-            let engine = std::str::from_utf8(&buf)?;
-            Some(engine.parse()?)
-        } else {
-            None
-        };
-        let db = {
-            match (engine_on_fs, engine) {
-                (None, e) => {
-                    let e = e.or(Some(KvsEngineSel::KvStore)).unwrap();
-                    // info!(log, "creating a new db, using engine: {e}");
-                    e
+    pub fn new(e: impl KvsEngine + 'static) -> Self {
+        Self(Box::new(e))
+    }
+    pub fn run(mut self, socket: impl ToSocketAddrs) -> Result<()> {
+        let listener = TcpListener::bind(socket)?;
+        for stream in listener.incoming() {
+            match stream {
+                Ok(stream) => {
+                    if let Err(e) = self.serve(stream) {
+                        todo!()
+                    }
                 }
-                (Some(e), None) => {
-                    // info!(log, "opening db with engine: {e}");
-                    e
-                }
-                (Some(e), Some(e2)) if e == e2 => {
-                    // info!(log, "opening db with engine: {e}");
-                    e
-                }
-                (Some(e), Some(e2)) => {
-                    let s = format!("db engine mismatch! db:`{e}`, cli: `{e2}`");
-                    // error!(log, "{s}");
-                    return Err(KvsError::CommandError(s).into());
-                }
+                Err(e) => todo!(),
             }
         }
-        .open(&path)?;
-        Ok(db)
+        todo!()
+    }
+
+    // we can use `?` to throw errors, which will be handled by upper function
+    fn serve(&mut self, stream: TcpStream) -> Result<()> {
+        let mut buf = String::new();
+        let reader = io::BufReader::new(&stream);
+        let mut writer = io::BufWriter::new(&stream);
+        let req_reader = serde_json::Deserializer::from_reader(reader).into_iter::<Request>();
+        #[inline]
+        fn trans_err<T, E: Display>(
+            result: std::result::Result<T, E>,
+        ) -> std::result::Result<T, String> {
+            result.map_err(|e| e.to_string())
+        }
+        for req in req_reader {
+            let response = match req? {
+                Request::Set { key, value } => Response::Set(trans_err(self.0.set(key, value))),
+                Request::Get { key } => Response::Get(trans_err(self.0.get(key))),
+                Request::Remove { key } => Response::Remove(trans_err(self.0.remove(key))),
+            };
+            serde_json::to_writer(&mut writer, &response)?;
+            writer.flush()?
+        }
+        Ok(())
     }
 }
 
@@ -60,20 +61,6 @@ impl KvsServer {
 pub enum KvsEngineSel {
     KvStore,
     SledKvsEngine,
-}
-impl KvsEngineSel {
-    pub fn open(self, path: &Path) -> crate::error::Result<Box<dyn KvsEngine>> {
-        let mut f = fs::OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(path)?;
-        write!(f, "{self}")?;
-        let path = path.parent().unwrap();
-        Ok(match self {
-            KvsEngineSel::KvStore => Box::new(KvStore::open(path)?),
-            KvsEngineSel::SledKvsEngine => Box::new(SledKvsEngine::open(path)?),
-        })
-    }
 }
 impl std::fmt::Display for KvsEngineSel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

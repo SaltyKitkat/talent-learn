@@ -18,7 +18,7 @@ pub enum Request {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Response {
-    Set,
-    Get(Option<String>),
-    Rm,
+    Set(Result<(), String>),
+    Get(Result<Option<String>, String>),
+    Remove(Result<(), String>),
 }

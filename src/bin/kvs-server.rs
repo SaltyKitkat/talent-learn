@@ -1,18 +1,13 @@
 use kvs::{
-    cli::{Request, Response},
-    error::KvsError,
+    engine::sled::SledKvsEngine,
     server::{KvsEngineSel, KvsServer},
-    KvsEngine,
+    KvStore,
 };
 use slog::{error, info, o, Drain};
-use std::{
-    env::current_dir,
-    fs,
-    io::{BufRead, BufReader, BufWriter, Read},
-    net::{SocketAddr, TcpListener},
-};
+use std::{env::current_dir, fs, io, net::SocketAddr};
 use structopt::{clap::crate_version, StructOpt};
 
+const DEFAULT_KVSENGINE: KvsEngineSel = KvsEngineSel::KvStore;
 #[derive(StructOpt)]
 struct Config {
     #[structopt(long, global = true, default_value = "127.0.0.1:4000")]
@@ -29,44 +24,30 @@ fn run_app() -> kvs::error::Result<()> {
     let log = slog::Logger::root(drain, o!());
     info!(log, "kvs-server started!");
     info!(log, "version: {}", crate_version!());
-    let mut db = KvsServer::open(current_dir()?, cfg.engine)?;
-
-    // setup listener
-    let listener = TcpListener::bind(cfg.addr)?;
-    info!(log, "Listening on socket: {}", cfg.addr);
-    for stream in listener.incoming() {
-        let stream = stream?;
-        let mut buf = String::new();
-        let mut reader = BufReader::new(&stream);
-        let mut writer = BufWriter::new(&stream);
-        loop {
-            buf.clear();
-            let size = reader.read_line(&mut buf)?;
-            if size == 0 {
-                break;
+    let path = current_dir()?;
+    let engine: KvsEngineSel = {
+        let path = path.join("00engine");
+        match fs::read(&path) {
+            Ok(v) => {
+                let s = std::str::from_utf8(&v)?;
+                s.parse()?
             }
-            // parse and execute
-            let cmd: Request = serde_json::de::from_str(&buf)?;
-            let response = match cmd {
-                Request::Set { key, value } => {
-                    db.set(key, value)?; // todo: log
-                    Response::Set
-                }
-                Request::Get { key } => Response::Get(db.get(key)?),
-                Request::Remove { key } => {
-                    db.remove(key)?; // todo: log
-                    Response::Rm
-                }
-            };
-            // return result
-            serde_json::ser::to_writer(&mut writer, &response)?;
+            Err(e) if matches!(e.kind(), io::ErrorKind::NotFound) => {
+                let engine = cfg.engine.or(Some(DEFAULT_KVSENGINE)).unwrap();
+                fs::write(&path, engine.to_string())?;
+                engine
+            }
+            Err(e) => return Err(e.into()),
         }
-    }
-    Ok(())
+    };
+    info!(log, "using storage engine: {engine}");
+    let server = match engine {
+        KvsEngineSel::KvStore => KvsServer::new(KvStore::open(&path)?),
+        KvsEngineSel::SledKvsEngine => KvsServer::new(SledKvsEngine::open(&path)?),
+    };
+    info!(log, "server listening on socket: {}", cfg.addr);
+    server.run(cfg.addr)
 }
 fn main() {
-    match run_app() {
-        Ok(_) => todo!(),
-        Err(_) => todo!(),
-    }
+    run_app().unwrap(); // todo: handle error
 }
