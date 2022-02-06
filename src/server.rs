@@ -1,15 +1,12 @@
 use crate::{
     cli::{Request, Response},
-    engine::sled::SledKvsEngine,
-    error::{KvsError, Result},
-    KvStore, KvsEngine,
+    error::Result,
+    KvsEngine,
 };
 use std::{
     fmt::Display,
-    fs,
     io::{self, Write},
     net::{TcpListener, TcpStream, ToSocketAddrs},
-    path::Path,
 };
 
 pub struct KvsServer(Box<dyn KvsEngine>);
@@ -34,7 +31,6 @@ impl KvsServer {
 
     // we can use `?` to throw errors, which will be handled by upper function
     fn serve(&mut self, stream: TcpStream) -> Result<()> {
-        let mut buf = String::new();
         let reader = io::BufReader::new(&stream);
         let mut writer = io::BufWriter::new(&stream);
         let req_reader = serde_json::Deserializer::from_reader(reader).into_iter::<Request>();
