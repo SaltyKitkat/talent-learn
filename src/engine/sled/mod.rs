@@ -12,14 +12,22 @@ impl SledKvsEngine {
 }
 impl KvsEngine for SledKvsEngine {
     fn set(&mut self, key: String, value: String) -> Result<()> {
-        todo!()
+        self.0.insert(key, value.into_bytes())?;
+        self.0.flush()?;
+        Ok(())
     }
 
     fn get(&mut self, key: String) -> Result<Option<String>> {
-        todo!()
+        self.0
+            .get(key)?
+            .map(|v| String::from_utf8(v.as_ref().to_vec()))
+            .transpose()
+            .map_err(|e| e.into())
     }
 
     fn remove(&mut self, key: String) -> Result<()> {
-        todo!()
+        self.0.remove(key)?;
+        self.0.flush()?;
+        Ok(())
     }
 }
