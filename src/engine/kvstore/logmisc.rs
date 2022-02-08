@@ -115,10 +115,6 @@ impl<T: Write + Seek> LogWriter<T> {
         })
     }
 
-    pub(crate) fn id(&self) -> u64 {
-        self.file_id
-    }
-
     fn append(&mut self, buf: &[u8]) -> Result<u64> {
         let Self { inner, pos, .. } = self;
         let old_pos = *pos;
