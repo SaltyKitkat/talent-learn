@@ -1,5 +1,5 @@
 #![deny(missing_docs)]
-use crate::error::{KvsError, Result};
+use crate::error::{KvsError, KvsResult};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -43,7 +43,7 @@ impl<T: Read + Seek> LogReader<T> {
         }
     }
 
-    pub(crate) fn read_log(&mut self, meta: &LogMeta) -> Result<Log> {
+    pub(crate) fn read_log(&mut self, meta: &LogMeta) -> KvsResult<Log> {
         self.inner.seek(SeekFrom::Start(meta.offset))?;
         let mut buf = vec![0; meta.len];
         self.inner.read_exact(&mut buf)?;
@@ -73,7 +73,7 @@ impl LogReaders {
         }
     }
 
-    pub(crate) fn read_log(&mut self, meta: &LogMeta) -> Result<Log> {
+    pub(crate) fn read_log(&mut self, meta: &LogMeta) -> KvsResult<Log> {
         if let Some(reader) = self.readers.get_mut(&meta.file_id) {
             Ok(reader.read_log(meta)?)
         } else {
@@ -105,7 +105,7 @@ pub(crate) struct LogWriter<T: Write + Seek> {
 }
 
 impl<T: Write + Seek> LogWriter<T> {
-    pub(crate) fn new(file_id: u64, f: T) -> Result<Self> {
+    pub(crate) fn new(file_id: u64, f: T) -> KvsResult<Self> {
         let mut inner = BufWriter::new(f);
         let pos = inner.seek(SeekFrom::End(0))?;
         Ok(Self {
@@ -115,18 +115,18 @@ impl<T: Write + Seek> LogWriter<T> {
         })
     }
 
-    fn append(&mut self, buf: &[u8]) -> Result<u64> {
+    fn append(&mut self, buf: &[u8]) -> KvsResult<u64> {
         let Self { inner, pos, .. } = self;
         let old_pos = *pos;
         inner.write_all(buf)?;
         *pos = inner.stream_position()?;
         Ok(old_pos)
     }
-    fn flush(&mut self) -> Result<()> {
+    fn flush(&mut self) -> KvsResult<()> {
         Ok(self.inner.flush()?)
     }
 
-    pub(crate) fn append_log(&mut self, log: Log) -> Result<(String, LogMeta)> {
+    pub(crate) fn append_log(&mut self, log: Log) -> KvsResult<(String, LogMeta)> {
         let buf = serde_json::ser::to_vec(&log)?;
         let offset = self.append(&buf)?;
         self.flush()?;

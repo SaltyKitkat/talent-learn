@@ -1,5 +1,5 @@
 use super::logmisc::LogMeta;
-use crate::error::{KvsError, Result};
+use crate::error::{KvsError, KvsResult};
 use std::{collections::HashMap, ops::Deref};
 
 /// A wrapper for hashmap, `insert` and `remove` functions will return the length of log
@@ -18,7 +18,7 @@ impl KvsIndex {
     }
 
     /// if the key to be removed is not found, an error will be returned.
-    pub(crate) fn remove(&mut self, key: &str) -> Result<usize> {
+    pub(crate) fn remove(&mut self, key: &str) -> KvsResult<usize> {
         match self.0.remove(key) {
             Some(cmd) => Ok(cmd.len()),
             None => Err(KvsError::Inner("Failed to find the key to remove".into()).into()),

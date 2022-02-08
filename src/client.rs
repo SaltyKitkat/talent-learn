@@ -1,6 +1,6 @@
 use crate::{
     cli::{Request, Response},
-    error::Result,
+    Result,
 };
 use serde::Deserialize;
 use serde_json::Deserializer;

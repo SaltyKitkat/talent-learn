@@ -1,7 +1,6 @@
-use sled::Db;
-
-use crate::error::Result;
+use super::Result;
 use crate::KvsEngine;
+use sled::Db;
 use std::path::Path;
 
 pub struct SledKvsEngine(Db);

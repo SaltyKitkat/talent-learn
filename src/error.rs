@@ -1,14 +1,25 @@
-use failure::{Error, Fail};
-use std::fmt::Display;
-pub type Result<T> = std::result::Result<T, Error>;
+use failure::Fail;
+use std::{error::Error, fmt::Display};
+pub(crate) type KvsResult<T> = std::result::Result<T, KvsError>;
 #[derive(Debug, Fail)]
 pub enum KvsError {
     CommandError(String),
-    KeyNotFound(String),
+    CompactionError(String),
+    KeyNotFound { key: String },
     Inner(String),
 }
 impl Display for KvsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "some error occurred.")
+        match self {
+            KvsError::CommandError(s) => write!(f, "kvs-cli: {s}"),
+            KvsError::CompactionError(s) => write!(f, "kvs-compact: {s}"),
+            KvsError::KeyNotFound { key } => write!(f, "Key not found: `{key}`"),
+            KvsError::Inner(s) => write!(f, "kvs-inner: {s}"),
+        }
+    }
+}
+impl<E: Error> From<E> for KvsError {
+    fn from(e: E) -> Self {
+        Self::Inner(format!("{e}"))
     }
 }

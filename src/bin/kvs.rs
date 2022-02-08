@@ -1,7 +1,6 @@
 use kvs::error::KvsError;
 use kvs::KvStore;
 use kvs::KvsEngine;
-use kvs::Result;
 use std::{path::PathBuf, process::exit};
 use structopt::StructOpt;
 
@@ -31,14 +30,14 @@ enum Cmd {
 fn main() {
     let r = run_app();
     if let Err(e) = r {
-        if let Some(KvsError::KeyNotFound(_k)) = e.as_fail().downcast_ref() {
+        if let Some(KvsError::KeyNotFound { key: _ }) = e.as_fail().downcast_ref() {
             println!("Key not found");
         }
         exit(1)
     }
 }
 
-fn run_app() -> Result<()> {
+fn run_app() -> Result<(), failure::Error> {
     let cfg = Config::from_args();
     if let Some(cmd) = cfg.cmd {
         use Cmd::*;

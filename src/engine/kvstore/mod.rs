@@ -1,7 +1,8 @@
 #![deny(missing_docs)]
 //! this is a crate doc
+use super::Result;
 use crate::{
-    error::{KvsError, Result},
+    error::{KvsError, KvsResult},
     KvsEngine,
 };
 use logmisc::{LogMeta, LogReader, LogReaders, LogWriter};
@@ -36,7 +37,37 @@ impl KvStore {
     /// the path should be a dir with some .kvs file in it.
     /// this function will use the kvs files to build a KvStore db and return it if succeed.
     /// If any error met, this function will return it.
-    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+    pub fn open(path: impl AsRef<Path>) -> KvsResult<Self> {
+        fn load(
+            index: &mut KvsIndex,
+            file_id: u64,
+            db_file: &mut LogReader<File>,
+        ) -> KvsResult<usize> {
+            let mut invalid_size = 0;
+            let mut pos = db_file.seek(SeekFrom::Start(0))?;
+            let mut t =
+                serde_json::Deserializer::from_reader(db_file.deref_mut()).into_iter::<Log>();
+            while let Some(cmd) = t.next() {
+                let new_pos = t.byte_offset() as u64;
+                match cmd? {
+                    Log::Rm(k) => invalid_size += index.remove(&k)?,
+                    Log::Set(k, _) => {
+                        invalid_size +=
+                            index.insert(k, LogMeta::new(file_id, pos, (new_pos - pos) as usize))
+                    }
+                }
+                pos = new_pos;
+            }
+            Ok(invalid_size)
+        }
+
+        fn db_open(path: &Path, i: u64) -> KvsResult<LogReader<File>> {
+            let mut db_path = path.to_owned();
+            db_path.push(i.to_string() + ".kvs");
+            let db_file = OpenOptions::new().read(true).open(db_path)?;
+            Ok(LogReader::new(db_file))
+        }
+
         let path = path.as_ref();
         fs::create_dir_all(path)?;
         let log_list = fs::read_dir(path)?;
@@ -77,16 +108,22 @@ impl KvStore {
         })
     }
 
-    fn compaction_trigger(&mut self) -> Result<()> {
+    fn compaction_trigger(&mut self) -> KvsResult<()> {
         if self.uncompact_size >= COMPACTION_THRESHOLD {
-            self.compaction_inner()
+            self.compaction_inner().map_err(|e| {
+                if let KvsError::Inner(s) = e {
+                    KvsError::CompactionError(s)
+                } else {
+                    panic!("unexpect error")
+                }
+            })
         } else {
             Ok(())
         }
     }
 
     // note: index and writer are replaced by the new ones while readers is just cleared.
-    fn compaction_inner(&mut self) -> Result<()> {
+    fn compaction_inner(&mut self) -> KvsResult<()> {
         let mut new_path = self.path.to_owned();
         let new_file_id = 0;
         new_path.push(new_file_id.to_string() + ".kvs");
@@ -119,7 +156,6 @@ impl KvStore {
         Ok(())
     }
 }
-
 impl KvsEngine for KvStore {
     /// Set the value of a key.
     /// Return `Ok(())` if succeed.
@@ -158,38 +194,13 @@ impl KvsEngine for KvStore {
             self.compaction_trigger()?;
             Ok(())
         } else {
-            Err(KvsError::KeyNotFound(key).into())
+            Err(KvsError::KeyNotFound { key }.into())
         }
     }
 }
 
 impl Drop for KvStore {
     fn drop(&mut self) {
-        self.compaction_inner();
+        self.compaction_inner().ok();
     }
-}
-
-fn load(index: &mut KvsIndex, file_id: u64, db_file: &mut LogReader<File>) -> Result<usize> {
-    let mut invalid_size = 0;
-    let mut pos = db_file.seek(SeekFrom::Start(0))?;
-    let mut t = serde_json::Deserializer::from_reader(db_file.deref_mut()).into_iter::<Log>();
-    while let Some(cmd) = t.next() {
-        let new_pos = t.byte_offset() as u64;
-        match cmd? {
-            Log::Rm(k) => invalid_size += index.remove(&k)?,
-            Log::Set(k, _) => {
-                invalid_size +=
-                    index.insert(k, LogMeta::new(file_id, pos, (new_pos - pos) as usize))
-            }
-        }
-        pos = new_pos;
-    }
-    Ok(invalid_size)
-}
-
-fn db_open(path: &Path, i: u64) -> Result<LogReader<File>> {
-    let mut db_path = path.to_owned();
-    db_path.push(i.to_string() + ".kvs");
-    let db_file = OpenOptions::new().read(true).open(db_path)?;
-    Ok(LogReader::new(db_file))
 }

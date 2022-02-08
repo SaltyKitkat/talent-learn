@@ -1,7 +1,7 @@
 use kvs::{
     engine::sled::SledKvsEngine,
     server::{KvsEngineSel, KvsServer},
-    KvStore,
+    KvStore, Result,
 };
 use slog::{error, info, o, Drain};
 use std::{env::current_dir, fs, io, net::SocketAddr};
@@ -16,7 +16,7 @@ struct Config {
     engine: Option<KvsEngineSel>,
 }
 
-fn run_app() -> kvs::error::Result<()> {
+fn run_app() -> Result<()> {
     let cfg = Config::from_args();
     let decorator = slog_term::TermDecorator::new().build();
     let drain = slog_term::FullFormat::new(decorator).build().fuse();

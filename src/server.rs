@@ -1,7 +1,6 @@
 use crate::{
     cli::{Request, Response},
-    error::Result,
-    KvsEngine,
+    KvsEngine, Result,
 };
 use std::{
     fmt::Display,
@@ -19,11 +18,11 @@ impl KvsServer {
         for stream in listener.incoming() {
             match stream {
                 Ok(stream) => {
-                    if let Err(e) = self.serve(stream) {
+                    if let Err(_e) = self.serve(stream) {
                         todo!()
                     }
                 }
-                Err(e) => todo!(),
+                Err(_e) => todo!(),
             }
         }
         todo!()

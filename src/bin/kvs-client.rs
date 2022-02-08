@@ -17,9 +17,6 @@ struct Config {
 fn main() {
     let r = run_app();
     if let Err(e) = r {
-        if let Some(kvs::error::KvsError::KeyNotFound(k)) = e.as_fail().downcast_ref() {
-            println!("Key not found");
-        }
         exit(1)
     }
 }
@@ -31,16 +28,9 @@ fn run_app() -> Result<()> {
         Response::Set(_) => (),
         Response::Get(r) => match r.map_err(|s| KvsError::Inner(s))? {
             Some(value) => println!("{value}"),
-            None => {
-                return Err(KvsError::KeyNotFound(match cfg.request {
-                    Request::Set { .. } => unreachable!(),
-                    Request::Get { key } => key,
-                    Request::Remove { .. } => unreachable!(),
-                })
-                .into())
-            }
+            None => println!("Key not found"),
         },
-        Response::Remove(_) => (),
+        Response::Remove(result) => return result,
     }
     Ok(())
 }
