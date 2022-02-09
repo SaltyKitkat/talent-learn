@@ -1,5 +1,5 @@
 use super::Result;
-use crate::KvsEngine;
+use crate::{error::KvsError, KvsEngine};
 use sled::Db;
 use std::path::Path;
 
@@ -25,8 +25,12 @@ impl KvsEngine for SledKvsEngine {
     }
 
     fn remove(&mut self, key: String) -> Result<()> {
-        self.0.remove(key)?;
+        let ret = self
+            .0
+            .remove(&key)?
+            .and(Some(()))
+            .ok_or(KvsError::KeyNotFound { key }.into());
         self.0.flush()?;
-        Ok(())
+        ret
     }
 }

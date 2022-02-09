@@ -1,5 +1,6 @@
 use kvs::{
     engine::sled::SledKvsEngine,
+    error::KvsError,
     server::{KvsEngineSel, KvsServer},
     KvStore, Result,
 };
@@ -30,7 +31,13 @@ fn run_app() -> Result<()> {
         match fs::read(&path) {
             Ok(v) => {
                 let s = std::str::from_utf8(&v)?;
-                s.parse()?
+                let e1 = s.parse()?;
+                match cfg.engine {
+                    Some(e2) if e1 != e2 => {
+                        return Err(KvsError::CommandError("engine mismatch".into()).into())
+                    }
+                    _ => e1,
+                }
             }
             Err(e) if matches!(e.kind(), io::ErrorKind::NotFound) => {
                 let engine = cfg.engine.or(Some(DEFAULT_KVSENGINE)).unwrap();

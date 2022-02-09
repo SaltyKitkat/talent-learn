@@ -17,6 +17,9 @@ struct Config {
 fn main() {
     let r = run_app();
     if let Err(e) = r {
+        if let Some(KvsError::KeyNotFound { key }) = e.as_fail().downcast_ref() {
+            eprintln!("Key not found");
+        }
         exit(1)
     }
 }
@@ -30,7 +33,9 @@ fn run_app() -> Result<()> {
             Some(value) => println!("{value}"),
             None => println!("Key not found"),
         },
-        Response::Remove(result) => return result,
+        Response::Remove(result) => {
+            return result.map_err(|e| KvsError::KeyNotFound { key: e }.into())
+        }
     }
     Ok(())
 }

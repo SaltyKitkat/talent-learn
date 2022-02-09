@@ -13,7 +13,7 @@ impl Display for KvsError {
         match self {
             KvsError::CommandError(s) => write!(f, "kvs-cli: {s}"),
             KvsError::CompactionError(s) => write!(f, "kvs-compact: {s}"),
-            KvsError::KeyNotFound { key } => write!(f, "Key not found: `{key}`"),
+            KvsError::KeyNotFound { key } => write!(f, "{key}"),
             KvsError::Inner(s) => write!(f, "kvs-inner: {s}"),
         }
     }
