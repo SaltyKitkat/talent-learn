@@ -80,8 +80,7 @@ impl LogReaders {
             Err(KvsError::Inner(format!(
                 "failed to find file id {} in readers index.",
                 meta.file_id
-            ))
-            .into())
+            )))
         }
     }
 }

@@ -21,7 +21,7 @@ impl KvsIndex {
     pub(crate) fn remove(&mut self, key: &str) -> KvsResult<usize> {
         match self.0.remove(key) {
             Some(cmd) => Ok(cmd.len()),
-            None => Err(KvsError::Inner("Failed to find the key to remove".into()).into()),
+            None => Err(KvsError::Inner("Failed to find the key to remove".into())),
         }
     }
 }

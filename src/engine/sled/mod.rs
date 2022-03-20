@@ -29,7 +29,7 @@ impl KvsEngine for SledKvsEngine {
             .0
             .remove(&key)?
             .and(Some(()))
-            .ok_or(KvsError::KeyNotFound { key }.into());
+            .ok_or_else(|| KvsError::KeyNotFound { key }.into());
         self.0.flush()?;
         ret
     }
