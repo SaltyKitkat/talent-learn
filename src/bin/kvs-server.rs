@@ -31,12 +31,16 @@ fn run_app() -> Result<()> {
         match fs::read(&path) {
             Ok(v) => {
                 let s = std::str::from_utf8(&v)?;
-                let e1 = s.parse()?;
+                let e_disk = s.parse()?;
                 match cfg.engine {
-                    Some(e2) if e1 != e2 => {
-                        return Err(KvsError::CommandError("engine mismatch".into()).into())
+                    Some(e_cli) if e_disk != e_cli => {
+                        error!(
+                            log,
+                            "engine from cli `{e_cli}` is different from engine on disk `{e_disk}`"
+                        );
+                        return Err(KvsError::CommandError("engine mismatch").into());
                     }
-                    _ => e1,
+                    _ => e_disk,
                 }
             }
             Err(e) if matches!(e.kind(), io::ErrorKind::NotFound) => {

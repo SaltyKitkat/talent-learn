@@ -51,14 +51,13 @@ impl<T: Read + Seek> LogReader<T> {
     }
 }
 
-impl<T: Read> Deref for LogReader<T> {
-    type Target = BufReader<T>;
-    fn deref(&self) -> &Self::Target {
+impl<T: Read> AsRef<BufReader<T>> for LogReader<T> {
+    fn as_ref(&self) -> &BufReader<T> {
         &self.inner
     }
 }
-impl<T: Read> DerefMut for LogReader<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
+impl<T: Read> AsMut<BufReader<T>> for LogReader<T> {
+    fn as_mut(&mut self) -> &mut BufReader<T> {
         &mut self.inner
     }
 }

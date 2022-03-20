@@ -3,7 +3,7 @@ use std::{error::Error, fmt::Display};
 pub(crate) type KvsResult<T> = std::result::Result<T, KvsError>;
 #[derive(Debug, Fail)]
 pub enum KvsError {
-    CommandError(String),
+    CommandError(&'static str),
     CompactionError(String),
     KeyNotFound { key: String },
     Inner(String),

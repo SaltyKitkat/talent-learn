@@ -10,7 +10,6 @@ use std::{
     ffi::OsStr,
     fs::{self, remove_file, File, OpenOptions},
     io::{Seek, SeekFrom},
-    ops::DerefMut,
     path::{Path, PathBuf},
 };
 
@@ -44,9 +43,8 @@ impl KvStore {
             db_file: &mut LogReader<File>,
         ) -> KvsResult<usize> {
             let mut invalid_size = 0;
-            let mut pos = db_file.seek(SeekFrom::Start(0))?;
-            let mut t =
-                serde_json::Deserializer::from_reader(db_file.deref_mut()).into_iter::<Log>();
+            let mut pos = db_file.as_mut().seek(SeekFrom::Start(0))?;
+            let mut t = serde_json::Deserializer::from_reader(db_file.as_mut()).into_iter::<Log>();
             while let Some(cmd) = t.next() {
                 let new_pos = t.byte_offset() as u64;
                 match cmd? {
@@ -61,9 +59,9 @@ impl KvStore {
             Ok(invalid_size)
         }
 
-        fn db_open(path: &Path, i: u64) -> KvsResult<LogReader<File>> {
+        fn db_open(path: &Path, id: u64) -> KvsResult<LogReader<File>> {
             let mut db_path = path.to_owned();
-            db_path.push(i.to_string() + ".kvs");
+            db_path.push(id.to_string() + ".kvs");
             let db_file = OpenOptions::new().read(true).open(db_path)?;
             Ok(LogReader::new(db_file))
         }
@@ -90,8 +88,7 @@ impl KvStore {
             readers.insert(i, reader);
         }
         let new_file_id = log_list.last().unwrap_or(&0) + 1;
-        let mut new_file_path = path.to_owned();
-        new_file_path.push(format!("{new_file_id}.kvs"));
+        let new_file_path = path.join(&format!("{new_file_id}.kvs"));
         let new_file = OpenOptions::new()
             .create_new(true)
             .append(true)
@@ -122,36 +119,36 @@ impl KvStore {
         }
     }
 
-    // note: index and writer are replaced by the new ones while readers is just cleared.
+    // note: index and writer are replaced by the new ones while readers are just cleared.
     fn compaction_inner(&mut self) -> KvsResult<()> {
-        let mut new_path = self.path.to_owned();
-        let new_file_id = 0;
-        new_path.push(new_file_id.to_string() + ".kvs");
-        let new_file = OpenOptions::new()
+        const ZERO_ID: u64 = 0;
+        const ZERO_FILENAME: &str = "0.kvs";
+        let zero_file_path = self.path.join(ZERO_FILENAME);
+        let zero_file = OpenOptions::new()
             .create_new(true)
             .read(true)
             .append(true)
-            .open(new_path)?;
-        let new_reader = LogReader::new(new_file.try_clone()?);
-        let mut new_writer = LogWriter::new(new_file_id, new_file)?;
+            .open(zero_file_path)?;
+        let zero_reader = LogReader::new(zero_file.try_clone()?);
+        let mut zero_writer = LogWriter::new(ZERO_ID, zero_file)?;
         let mut new_index = KvsIndex::new();
         for (key, cmd) in self.index.iter() {
             let log = self.readers.read_log(cmd)?;
             debug_assert!(matches!(log, Log::Set(..)));
-            let (read_key, m) = new_writer.append_log(log)?;
+            let (read_key, m) = zero_writer.append_log(log)?;
             debug_assert_eq!(&read_key, key);
             let old_len = new_index.insert(read_key, m);
             debug_assert_eq!(old_len, 0);
         }
         self.index = new_index;
-        self.writer = new_writer;
+        self.writer = zero_writer;
         for &i in self.readers.keys() {
             let mut old_file_path = self.path.to_owned();
             old_file_path.push(i.to_string() + ".kvs");
             remove_file(old_file_path)?;
         }
         self.readers.clear();
-        self.readers.insert(new_file_id, new_reader);
+        self.readers.insert(ZERO_ID, zero_reader);
         self.uncompact_size = 0;
         Ok(())
     }

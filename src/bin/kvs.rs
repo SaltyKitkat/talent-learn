@@ -56,6 +56,6 @@ fn run_app() -> Result<(), failure::Error> {
         }
     } else {
         eprintln!("run `kvs --help` to get help messages");
-        Err(KvsError::CommandError(String::from("unknown command")).into())
+        Err(KvsError::CommandError("unknown command").into())
     }
 }
