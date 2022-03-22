@@ -1,5 +1,8 @@
 #![deny(missing_docs)]
-use crate::error::{KvsError, KvsResult};
+use crate::{
+    engine::kvstore::KvsFileId,
+    error::{KvsError, KvsResult},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -14,13 +17,13 @@ pub(crate) enum Log {
 }
 
 pub(crate) struct LogMeta {
-    file_id: u64,
+    file_id: KvsFileId,
     offset: u64,
     len: usize,
 }
 
 impl LogMeta {
-    pub(crate) fn new(file_id: u64, offset: u64, len: usize) -> Self {
+    pub(crate) fn new(file_id: KvsFileId, offset: u64, len: usize) -> Self {
         Self {
             file_id,
             offset,
@@ -63,7 +66,7 @@ impl<T: Read> AsMut<BufReader<T>> for LogReader<T> {
 }
 
 pub(crate) struct LogReaders {
-    readers: BTreeMap<u64, LogReader<File>>,
+    readers: BTreeMap<KvsFileId, LogReader<File>>,
 }
 impl LogReaders {
     pub(crate) fn new() -> Self {
@@ -84,7 +87,7 @@ impl LogReaders {
     }
 }
 impl Deref for LogReaders {
-    type Target = BTreeMap<u64, LogReader<File>>;
+    type Target = BTreeMap<KvsFileId, LogReader<File>>;
 
     fn deref(&self) -> &Self::Target {
         &self.readers
@@ -97,27 +100,24 @@ impl DerefMut for LogReaders {
 }
 
 pub(crate) struct LogWriter<T: Write + Seek> {
-    file_id: u64,
+    file_id: KvsFileId,
     inner: BufWriter<T>,
-    pos: u64,
 }
 
 impl<T: Write + Seek> LogWriter<T> {
-    pub(crate) fn new(file_id: u64, f: T) -> KvsResult<Self> {
-        let mut inner = BufWriter::new(f);
-        let pos = inner.seek(SeekFrom::End(0))?;
-        Ok(Self {
-            file_id,
-            inner,
-            pos,
-        })
+    pub(crate) fn new(file_id: KvsFileId, f: T) -> Self {
+        let inner = BufWriter::new(f);
+        Self { file_id, inner }
+    }
+
+    #[inline(always)]
+    pub(crate) fn id(&self) -> KvsFileId {
+        self.file_id
     }
 
     fn append(&mut self, buf: &[u8]) -> KvsResult<u64> {
-        let Self { inner, pos, .. } = self;
-        let old_pos = *pos;
-        inner.write_all(buf)?;
-        *pos = inner.stream_position()?;
+        let old_pos = self.inner.seek(SeekFrom::End(0))?;
+        self.inner.write_all(buf)?;
         Ok(old_pos)
     }
     fn flush(&mut self) -> KvsResult<()> {

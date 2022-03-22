@@ -10,6 +10,7 @@ use std::{
     ffi::OsStr,
     fs::{self, remove_file, File, OpenOptions},
     io::{Seek, SeekFrom},
+    mem,
     path::{Path, PathBuf},
 };
 
@@ -20,6 +21,8 @@ mod kvsindex;
 mod logmisc;
 use self::logmisc::Log;
 use kvsindex::KvsIndex;
+
+type KvsFileId = u32;
 
 /// KvStore
 /// the main struct of KVS
@@ -39,7 +42,7 @@ impl KvStore {
     pub fn open(path: impl AsRef<Path>) -> KvsResult<Self> {
         fn load(
             index: &mut KvsIndex,
-            file_id: u64,
+            file_id: KvsFileId,
             db_file: &mut LogReader<File>,
         ) -> KvsResult<usize> {
             let mut invalid_size = 0;
@@ -59,13 +62,6 @@ impl KvStore {
             Ok(invalid_size)
         }
 
-        fn db_open(path: &Path, id: u64) -> KvsResult<LogReader<File>> {
-            let mut db_path = path.to_owned();
-            db_path.push(id.to_string() + ".kvs");
-            let db_file = OpenOptions::new().read(true).open(db_path)?;
-            Ok(LogReader::new(db_file))
-        }
-
         let path = path.as_ref();
         fs::create_dir_all(path)?;
         let log_list = fs::read_dir(path)?;
@@ -75,7 +71,7 @@ impl KvStore {
                 .filter(|p| p.extension() == Some("kvs".as_ref()))
                 .flat_map(|p| p.file_stem().and_then(OsStr::to_str).map(str::parse))
                 .flatten()
-                .collect::<Vec<u64>>();
+                .collect::<Vec<KvsFileId>>();
             log_list.sort_unstable();
             log_list
         };
@@ -83,18 +79,18 @@ impl KvStore {
         let mut uncompact_size = 0;
         let mut index = KvsIndex::new();
         for &i in log_list.iter() {
-            let mut reader = db_open(path, i)?;
+            let mut reader = open_reader(path, i)?;
             uncompact_size += load(&mut index, i, &mut reader)?;
             readers.insert(i, reader);
         }
         let new_file_id = log_list.last().unwrap_or(&0) + 1;
-        let new_file_path = path.join(&format!("{new_file_id}.kvs"));
+        let new_file_path = build_path(path, new_file_id);
         let new_file = OpenOptions::new()
             .create_new(true)
             .append(true)
             .read(true)
             .open(new_file_path)?;
-        let writer = LogWriter::new(new_file_id, new_file.try_clone()?)?;
+        let writer = LogWriter::new(new_file_id, new_file.try_clone()?);
         readers.insert(new_file_id, LogReader::new(new_file));
         Ok(Self {
             index,
@@ -121,35 +117,42 @@ impl KvStore {
 
     // note: index and writer are replaced by the new ones while readers are just cleared.
     fn compaction_inner(&mut self) -> KvsResult<()> {
-        const ZERO_ID: u64 = 0;
-        const ZERO_FILENAME: &str = "0.kvs";
-        let zero_file_path = self.path.join(ZERO_FILENAME);
-        let zero_file = OpenOptions::new()
+        let new_id = self.writer.id().wrapping_add(1);
+        let new_filename = format!("{new_id}.kvs");
+        let new_file_path = self.path.join(&new_filename);
+        let mut new_file = OpenOptions::new()
             .create_new(true)
             .read(true)
             .append(true)
-            .open(zero_file_path)?;
-        let zero_reader = LogReader::new(zero_file.try_clone()?);
-        let mut zero_writer = LogWriter::new(ZERO_ID, zero_file)?;
-        let mut new_index = KvsIndex::new();
-        for (key, cmd) in self.index.iter() {
-            let log = self.readers.read_log(cmd)?;
-            debug_assert!(matches!(log, Log::Set(..)));
-            let (read_key, m) = zero_writer.append_log(log)?;
-            debug_assert_eq!(&read_key, key);
-            let old_len = new_index.insert(read_key, m);
-            debug_assert_eq!(old_len, 0);
-        }
-        self.index = new_index;
-        self.writer = zero_writer;
-        for &i in self.readers.keys() {
-            let mut old_file_path = self.path.to_owned();
-            old_file_path.push(i.to_string() + ".kvs");
+            .open(new_file_path)?;
+        self.index = {
+            let mut new_index = KvsIndex::new();
+            let mut new_writer = LogWriter::new(new_id, &mut new_file);
+            for (key, cmd) in self.index.iter() {
+                let log = self.readers.read_log(cmd)?;
+                debug_assert!(matches!(log, Log::Set(..)));
+                let (read_key, m) = new_writer.append_log(log)?;
+                debug_assert_eq!(&read_key, key);
+                let old_len = new_index.insert(read_key, m);
+                debug_assert_eq!(old_len, 0);
+            }
+            new_index
+        };
+        let new_readers = {
+            let mut new_readers = LogReaders::new();
+            new_readers.insert(new_id, LogReader::new(new_file));
+            new_readers
+        };
+        let old_readers = mem::replace(&mut self.readers, new_readers);
+        let writer_id = new_id.wrapping_add(1);
+        let (reader, writer) = open_writer(&self.path, writer_id)?;
+        self.writer = writer;
+        self.readers.insert(writer_id, reader);
+        self.uncompact_size = 0;
+        for &i in old_readers.keys() {
+            let old_file_path = self.path.join(format!("{i}.kvs"));
             remove_file(old_file_path)?;
         }
-        self.readers.clear();
-        self.readers.insert(ZERO_ID, zero_reader);
-        self.uncompact_size = 0;
         Ok(())
     }
 }
@@ -199,4 +202,27 @@ impl Drop for KvStore {
     fn drop(&mut self) {
         self.compaction_inner().ok();
     }
+}
+
+fn build_path(path: &Path, id: KvsFileId) -> PathBuf {
+    path.join(format!("{id}.kvs"))
+}
+
+fn open_reader(path: &Path, id: KvsFileId) -> KvsResult<LogReader<File>> {
+    let db_path = build_path(path, id);
+    let db_file = OpenOptions::new().read(true).open(db_path)?;
+    Ok(LogReader::new(db_file))
+}
+
+fn open_writer(path: &Path, id: KvsFileId) -> KvsResult<(LogReader<File>, LogWriter<File>)> {
+    let db_path = build_path(path, id);
+    let db_file = OpenOptions::new()
+        .create(true)
+        .read(true)
+        .append(true)
+        .open(db_path)?;
+    Ok((
+        LogReader::new(db_file.try_clone()?),
+        LogWriter::new(id, db_file),
+    ))
 }
