@@ -34,11 +34,9 @@ fn run_app() -> Result<()> {
                 let e_disk = s.parse()?;
                 match cfg.engine {
                     Some(e_cli) if e_disk != e_cli => {
-                        error!(
-                            log,
-                            "engine from cli `{e_cli}` is different from engine on disk `{e_disk}`"
-                        );
-                        return Err(KvsError::CommandError("engine mismatch").into());
+                        let e = KvsError::MisMatchEngine { e_disk, e_cli };
+                        error!(log, "{e}");
+                        return Err(e.into());
                     }
                     _ => e_disk,
                 }
@@ -53,8 +51,8 @@ fn run_app() -> Result<()> {
     };
     info!(log, "using storage engine: {engine}");
     let server = match engine {
-        KvsEngineSel::KvStore => KvsServer::new(KvStore::open(&path)?),
-        KvsEngineSel::SledKvsEngine => KvsServer::new(SledKvsEngine::open(&path)?),
+        KvsEngineSel::KvStore => KvsServer::new(KvStore::open(&path)?, &log),
+        KvsEngineSel::SledKvsEngine => KvsServer::new(SledKvsEngine::open(&path)?, &log),
     };
     info!(log, "server listening on socket: {}", cfg.addr);
     server.run(cfg.addr)

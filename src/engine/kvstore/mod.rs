@@ -172,7 +172,6 @@ impl KvsEngine for KvStore {
         match self.index.get(&key) {
             Some(meta) => {
                 let read_log = self.readers.read_log(meta)?;
-                debug_assert!(matches!(read_log, Log::Set(..)));
                 match read_log {
                     Log::Set(_, s) => Ok(Some(s)),
                     Log::Rm(..) => unreachable!(),
