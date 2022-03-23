@@ -23,7 +23,10 @@ impl Display for KvsError {
             KvsError::CommandError(s) => write!(f, "kvs-cli: {s}"),
             KvsError::CompactionError(s) => write!(f, "kvs-compact: {s}"),
             KvsError::Inner(s) => write!(f, "kvs-inner: {s}"),
-            KvsError::InvalidEngine(s) => write!(f, "kvs: invalid engine `{s}`, choose either `kvs` or `sled`"),
+            KvsError::InvalidEngine(s) => write!(
+                f,
+                "kvs: invalid engine `{s}`, choose either `kvs` or `sled`"
+            ),
             KvsError::MisMatchEngine { e_disk, e_cli } => write!(
                 f,
                 "engine from cli `{e_cli}` is different from engine on disk `{e_disk}`"

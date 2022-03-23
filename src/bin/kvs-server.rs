@@ -4,11 +4,10 @@ use kvs::{
     server::{KvsEngineSel, KvsServer},
     KvStore, Result,
 };
-use slog::{error, info, o, Drain};
-use std::{env::current_dir, fs, io, net::SocketAddr};
+use slog::{error, info, o, Drain, Logger};
+use std::{env::current_dir, fs, io, net::SocketAddr, path::Path, process::exit};
 use structopt::{clap::crate_version, StructOpt};
 
-const DEFAULT_KVSENGINE: KvsEngineSel = KvsEngineSel::KvStore;
 #[derive(StructOpt)]
 struct Config {
     #[structopt(long, global = true, default_value = "127.0.0.1:4000")]
@@ -17,46 +16,56 @@ struct Config {
     engine: Option<KvsEngineSel>,
 }
 
-fn run_app() -> Result<()> {
-    let cfg = Config::from_args();
+fn main() {
     let decorator = slog_term::TermDecorator::new().build();
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
     let drain = slog_async::Async::new(drain).build().fuse();
-    let log = slog::Logger::root(drain, o!());
+    let logger = slog::Logger::root(drain, o!());
+    if let Err(e) = run_app(&logger) {
+        error!(logger, "{e}");
+        exit(1);
+    }
+}
+
+fn run_app(log: &Logger) -> Result<()> {
+    let cfg = Config::from_args();
     info!(log, "kvs-server started!");
     info!(log, "version: {}", crate_version!());
     let path = current_dir()?;
     let engine: KvsEngineSel = {
         let path = path.join("00engine");
-        match fs::read(&path) {
-            Ok(v) => {
-                let s = std::str::from_utf8(&v)?;
-                let e_disk = s.parse()?;
-                match cfg.engine {
-                    Some(e_cli) if e_disk != e_cli => {
+        let e_cli = cfg.engine;
+        match current_engine(&path)? {
+            Some(e_disk) => {
+                if let Some(e_cli) = e_cli {
+                    if e_cli != e_disk {
                         let e = KvsError::MisMatchEngine { e_disk, e_cli };
                         error!(log, "{e}");
                         return Err(e.into());
                     }
-                    _ => e_disk,
                 }
+                e_disk
             }
-            Err(e) if matches!(e.kind(), io::ErrorKind::NotFound) => {
-                let engine = cfg.engine.or(Some(DEFAULT_KVSENGINE)).unwrap();
+            None => {
+                let engine = e_cli.unwrap_or_default();
                 fs::write(&path, engine.to_string())?;
                 engine
             }
-            Err(e) => return Err(e.into()),
         }
     };
     info!(log, "using storage engine: {engine}");
     let server = match engine {
-        KvsEngineSel::KvStore => KvsServer::new(KvStore::open(&path)?, &log),
-        KvsEngineSel::SledKvsEngine => KvsServer::new(SledKvsEngine::open(&path)?, &log),
+        KvsEngineSel::KvStore => KvsServer::new(KvStore::open(&path)?, log),
+        KvsEngineSel::SledKvsEngine => KvsServer::new(SledKvsEngine::open(&path)?, log),
     };
     info!(log, "server listening on socket: {}", cfg.addr);
     server.run(cfg.addr)
 }
-fn main() {
-    run_app().unwrap(); // todo: handle error
+
+fn current_engine(path: &Path) -> Result<Option<KvsEngineSel>> {
+    match fs::read_to_string(path) {
+        Ok(buf) => Ok(Some(buf.parse()?)),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.into()),
+    }
 }

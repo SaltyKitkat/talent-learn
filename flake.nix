@@ -21,6 +21,7 @@
       {
         devShell = with pkgs; mkShell {
           buildInputs = [
+            cloc
             nixpkgs-fmt
 
             clang_13

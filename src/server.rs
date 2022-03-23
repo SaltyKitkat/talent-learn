@@ -67,6 +67,11 @@ pub enum KvsEngineSel {
     KvStore,
     SledKvsEngine,
 }
+impl Default for KvsEngineSel {
+    fn default() -> Self {
+        Self::KvStore
+    }
+}
 impl std::fmt::Display for KvsEngineSel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let display = match self {
@@ -76,6 +81,7 @@ impl std::fmt::Display for KvsEngineSel {
         write!(f, "{display}")
     }
 }
+
 impl std::str::FromStr for KvsEngineSel {
     type Err = KvsError;
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {

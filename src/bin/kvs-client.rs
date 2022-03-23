@@ -15,8 +15,7 @@ struct Config {
 }
 
 fn main() {
-    let r = run_app();
-    if let Err(e) = r {
+    if let Err(e) = run_app() {
         if let Some(KvsError::KeyNotFound { key: _ }) = e.as_fail().downcast_ref() {
             eprintln!("Key not found");
         }
