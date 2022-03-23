@@ -1,6 +1,6 @@
-use kvs::error::KvsError;
-use kvs::KvStore;
 use kvs::KvsEngine;
+use kvs::Result;
+use kvs::{error::KvsError, KvStore};
 use std::{path::PathBuf, process::exit};
 use structopt::StructOpt;
 
@@ -30,14 +30,14 @@ enum Cmd {
 fn main() {
     let r = run_app();
     if let Err(e) = r {
-        if let Some(KvsError::KeyNotFound { key: _ }) = e.as_fail().downcast_ref() {
+        if let KvsError::KeyNotFound { key: _ } = e {
             println!("Key not found");
         }
         exit(1)
     }
 }
 
-fn run_app() -> Result<(), failure::Error> {
+fn run_app() -> Result<()> {
     let cfg = Config::from_args();
     if let Some(cmd) = cfg.cmd {
         use Cmd::*;
@@ -56,6 +56,6 @@ fn run_app() -> Result<(), failure::Error> {
         }
     } else {
         eprintln!("run `kvs --help` to get help messages");
-        Err(KvsError::CommandError("unknown command").into())
+        Err(KvsError::CommandError("unknown command"))
     }
 }

@@ -17,11 +17,10 @@ impl KvsEngine for SledKvsEngine {
     }
 
     fn get(&mut self, key: String) -> Result<Option<String>> {
-        self.0
+        Ok(self
+            .0
             .get(key)?
-            .map(|v| String::from_utf8(v.as_ref().to_vec()))
-            .transpose()
-            .map_err(|e| e.into())
+            .map(|v| String::from_utf8_lossy(v.as_ref()).to_string()))
     }
 
     fn remove(&mut self, key: String) -> Result<()> {
@@ -29,7 +28,7 @@ impl KvsEngine for SledKvsEngine {
             .0
             .remove(&key)?
             .and(Some(()))
-            .ok_or_else(|| KvsError::KeyNotFound { key }.into());
+            .ok_or(KvsError::KeyNotFound { key });
         self.0.flush()?;
         ret
     }

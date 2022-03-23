@@ -41,7 +41,7 @@ fn run_app(log: &Logger) -> Result<()> {
                     if e_cli != e_disk {
                         let e = KvsError::MisMatchEngine { e_disk, e_cli };
                         error!(log, "{e}");
-                        return Err(e.into());
+                        return Err(e);
                     }
                 }
                 e_disk

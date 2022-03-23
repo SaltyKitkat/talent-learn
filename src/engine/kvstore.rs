@@ -201,7 +201,7 @@ impl KvsEngine for KvStore {
             self.compaction_trigger()?;
             Ok(())
         } else {
-            Err(KvsError::KeyNotFound { key }.into())
+            Err(KvsError::KeyNotFound { key })
         }
     }
 }

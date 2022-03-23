@@ -1,42 +1,46 @@
-use failure::Fail;
-use std::{error::Error, fmt::Display};
+use std::io;
 
 use crate::server::KvsEngineSel;
+use thiserror::Error;
+
 pub(crate) type KvsResult<T> = std::result::Result<T, KvsError>;
-#[derive(Debug, Fail)]
+#[derive(Debug, Error)]
 pub enum KvsError {
+    #[error("kvs-cli: {0}")]
     CommandError(&'static str),
+
+    #[error("kvs-compact: {0}")]
     CompactionError(String),
+
+    #[error("kvs-inner: {0}")]
     Inner(String),
+
+    #[error("kvs: invalid engine `{0}`, choose either `kvs` or `sled`")]
     InvalidEngine(String),
+    #[error("kvs-io: {source}")]
+    IO {
+        #[from]
+        source: io::Error,
+    },
+
+    #[error("engine from cli `{e_cli}` is different from engine on disk `{e_disk}")]
     MisMatchEngine {
         e_disk: KvsEngineSel,
         e_cli: KvsEngineSel,
     },
-    KeyNotFound {
-        key: String,
+
+    #[error("{key}")]
+    KeyNotFound { key: String },
+
+    #[error("serde: {source}")]
+    Serde {
+        #[from]
+        source: serde_json::Error,
     },
-}
-impl Display for KvsError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            KvsError::CommandError(s) => write!(f, "kvs-cli: {s}"),
-            KvsError::CompactionError(s) => write!(f, "kvs-compact: {s}"),
-            KvsError::Inner(s) => write!(f, "kvs-inner: {s}"),
-            KvsError::InvalidEngine(s) => write!(
-                f,
-                "kvs: invalid engine `{s}`, choose either `kvs` or `sled`"
-            ),
-            KvsError::MisMatchEngine { e_disk, e_cli } => write!(
-                f,
-                "engine from cli `{e_cli}` is different from engine on disk `{e_disk}`"
-            ),
-            KvsError::KeyNotFound { key } => write!(f, "{key}"),
-        }
-    }
-}
-impl<E: Error> From<E> for KvsError {
-    fn from(e: E) -> Self {
-        Self::Inner(format!("{e}"))
-    }
+
+    #[error("sled: {source}")]
+    Sled {
+        #[from]
+        source: sled::Error,
+    },
 }

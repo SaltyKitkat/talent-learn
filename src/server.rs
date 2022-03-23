@@ -24,13 +24,11 @@ impl<'log> KvsServer<'log> {
     pub fn run(mut self, socket: impl ToSocketAddrs) -> Result<()> {
         let listener = TcpListener::bind(socket)?;
         for stream in listener.incoming() {
-            match stream {
-                Ok(stream) => {
-                    if let Err(e) = self.serve(stream) {
-                        warn!(self.logger, "{e}");
-                    }
-                }
-                Err(e) => warn!(self.logger, "{e}"),
+            if let Err(e) = stream
+                .map_err(|e| e.into())
+                .and_then(|stream| self.serve(stream))
+            {
+                warn!(self.logger, "{e}");
             }
         }
         unreachable!()
@@ -42,18 +40,14 @@ impl<'log> KvsServer<'log> {
         let mut writer = io::BufWriter::new(&stream);
         let req_reader = serde_json::Deserializer::from_reader(reader).into_iter::<Request>();
         #[inline]
-        fn trans_err<T, E: Display>(
-            result: std::result::Result<T, E>,
-        ) -> std::result::Result<T, String> {
+        fn t<T, E: Display>(result: std::result::Result<T, E>) -> std::result::Result<T, String> {
             result.map_err(|e| e.to_string())
         }
         for req in req_reader {
             let response = match req? {
-                Request::Set { key, value } => {
-                    Response::Set(trans_err(self.engine.set(key, value)))
-                }
-                Request::Get { key } => Response::Get(trans_err(self.engine.get(key))),
-                Request::Remove { key } => Response::Remove(trans_err(self.engine.remove(key))),
+                Request::Set { key, value } => Response::Set(t(self.engine.set(key, value))),
+                Request::Get { key } => Response::Get(t(self.engine.get(key))),
+                Request::Remove { key } => Response::Remove(t(self.engine.remove(key))),
             };
             serde_json::to_writer(&mut writer, &response)?;
             writer.flush()?

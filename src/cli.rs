@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 
+type Result<T> = std::result::Result<T, String>;
+
 #[derive(Debug, Deserialize, Serialize, StructOpt)]
 pub enum Request {
     Set {
@@ -18,7 +20,7 @@ pub enum Request {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Response {
-    Set(Result<(), String>),
-    Get(Result<Option<String>, String>),
-    Remove(Result<(), String>),
+    Set(Result<()>),
+    Get(Result<Option<String>>),
+    Remove(Result<()>),
 }
