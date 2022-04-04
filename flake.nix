@@ -21,8 +21,7 @@
       {
         devShell = with pkgs; mkShell {
           buildInputs = [
-            cloc
-            nixpkgs-fmt
+            rnix-lsp
 
             clang_13
             lld_13
