@@ -14,23 +14,23 @@ path = "src/bin/kvs-server.rs"
 
 [dependencies]
 crossbeam = "*"
-serde_json = "1.0"
-sled = "0.34"
-slog = "2.7"
-slog-async = "2.6"
-slog-term = "2.8"
-structopt = "0.3"
-thiserror = "1"
+serde_json = "*"
+sled = "*"
+slog = "*"
+slog-async = "*"
+slog-term = "*"
+structopt = "*"
+thiserror = "*"
 
 [dependencies.serde]
 features = ["derive"]
-version = "1.0"
+version = "*"
 
 [dev-dependencies]
-assert_cmd = "1"
-predicates = "1"
-tempfile = "3.3"
-walkdir = "2"
+assert_cmd = "*"
+predicates = "*"
+tempfile = "*"
+walkdir = "*"
 
 [profile]
 [profile.release]
