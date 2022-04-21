@@ -18,6 +18,8 @@ fn main() {
     if let Err(e) = run_app() {
         if let KvsError::KeyNotFound { key: _ } = e {
             eprintln!("Key not found");
+        } else {
+            eprintln!("{e}");
         }
         exit(1)
     }
@@ -28,7 +30,7 @@ fn run_app() -> Result<()> {
     let mut client = KvsClient::connect(cfg.addr)?;
     match client.send_request(&cfg.request)? {
         Response::Set(_) => (),
-        Response::Get(r) => match r.map_err(|s| KvsError::Inner(s))? {
+        Response::Get(r) => match r.map_err(KvsError::Inner)? {
             Some(value) => println!("{value}"),
             None => println!("Key not found"),
         },

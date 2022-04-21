@@ -32,6 +32,7 @@ fn run_app(log: &Logger) -> Result<()> {
     info!(log, "kvs-server started!");
     info!(log, "version: {}", crate_version!());
     let path = current_dir()?;
+    info!(log, "working dir: {}", path.to_string_lossy());
     let engine: KvsEngineSel = {
         let path = path.join("00engine");
         let e_cli = cfg.engine;
